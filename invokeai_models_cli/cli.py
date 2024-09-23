@@ -22,27 +22,36 @@ install()
 
 """
 =========================================================================
-Invoke Preset CLI - Simplified Tool for installing Invoke AI styling presets
+Invoke Models CLI - Simplified Tool working with orphaned Invoke AI models
 =========================================================================
 
-Invoke preset is a simplified tool for installing and updating Invoke AI
-styles presets from the command line.
+Invoke modelsis a simplified tool for working with orphaned Invoke AI models
+left in the database after the external source has been deleted. It allows
+you to list, compare, and delete models automatically or via a selection menu.
+
+Wrote this tool to solve a personal pain  point with orphaned external models
+that are not managed by Invoke AI. This tool is not a replacement for the
+official Invoke AI web ui.
 
 
 Usage:
-$ pipx install invoke-presets (recommended)
+$ pipx install invokeai-models (recommended)
 $ pipx install . (if you want to install it globally)
 $ pip install -e . (if you want to install it locally and poke around, 
 make sure to create a virtual environment)
-$ invoke-presets [OPTIONS] [COMMAND] [ARGS]
+$ invokeai-models [OPTIONS] [COMMAND] [ARGS]
 
 Commands:
 
-invoke-presets database create-snapshot
-invoke-presets database list-snapshots
-invoke-presets database delete-snapshot
-invoke-presets database restore-snapshot
-
+invokeai-models database create-snapshot
+invokeai-models database list-snapshots
+invokeai-models database delete-snapshot
+invokeai-models database restore-snapshot
+invokeai-models local-models
+invokeai-models compare-models
+invokeai-models sync-models
+invokeai-models database-models
+invokeai-models about
 """
 
 __all__ = ["invoke_models_cli"]
