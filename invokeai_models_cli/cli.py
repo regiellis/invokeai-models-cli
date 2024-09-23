@@ -10,7 +10,7 @@ from .functions import (
     create_snapshot,
     database_models_display,
     local_models_display,
-    # list_models_cli,
+    compare_models_display,
     about_cli,
 )
 
@@ -86,7 +86,7 @@ def database_delete_command():
 )
 def database_restore_command():
     restore_snapshot()
-    
+
 
 @invoke_models_cli.command("local-models", help="List local models files.")
 def local_models_command(
@@ -100,6 +100,11 @@ def local_models_command(
 @invoke_models_cli.command("database-models", help="List models in the database.")
 def database_models_command():
     database_models_display()
+
+
+@invoke_models_cli.command("compare-models", help="List models in the database.")
+def compare_models_command():
+    compare_models_display()
 
 
 # @invoke_models_cli.command(

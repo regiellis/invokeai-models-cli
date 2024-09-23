@@ -309,63 +309,72 @@ def ensure_snapshots_dir():
 
 # ANCHOR: DATABASE FUNCTIONS END
 
-def filter_unmatched(
-    local_models: List[Dict[str, Any]], db_models: List[Dict[str, Any]]
-) -> List[Dict[str, Any]]:
-    set_local = set(local_models)
-    set_db = set(db_models)
-    unmatched = list(set_local.symmetric_difference(set_db))
-
-    return unmatched
-
 
 def compare_models(
     local_models: List[Dict[str, Any]], db_models: List[Dict[str, Any]]
 ) -> None:
     """
-    Compare local model files with database entries and display differences.
+    Compare database entries with local model files and display differences.
+    Only includes models with source_type:path and format of LORA or checkpoint.
 
     Args:
     local_models (List[Dict[str, Any]]): Information about local model files.
     db_models (List[Dict[str, Any]]): Information about models in the database.
     """
 
+    # Filter db_models to only include relevant models
+    filtered_db_models = [
+        model
+        for model in db_models
+        if model.get("metadata", {}).get("source_type") == "path"
+        and model.get("metadata", {}).get("format", "").lower()
+        in ["lora", "checkpoint"]
+    ]
+
     # Create sets for easy comparison
     local_filenames = {model["name"] for model in local_models}
-    db_filenames = {model["name"] for model in db_models}
+    db_filenames = {model["name"] for model in filtered_db_models}
 
-    # Models present in local files but not in the database
-    missing_in_db = local_filenames - db_filenames
-    
+    # Models present in the database but not in local files
+    missing_on_disk = db_filenames - local_filenames
+
     # Prepare a table to display the results
     console = Console()
-    table = Table(title="Local Models Missing in Database")
+    models_table = Table(title="Models in Database but Not on Disk")
 
-    table.add_column("Filename", justify="left", style="cyan")
-    table.add_column("Type", justify="left", style="magenta")
-    table.add_column("Created", justify="left", style="green")
-    table.add_column("Updated", justify="left", style="yellow")
+    models_table.add_column("Name", justify="left", style="yellow")
+    models_table.add_column("Type", justify="left", style="cyan")
+    models_table.add_column("Format", justify="left", style="magenta")
+    models_table.add_column("Path", justify="left", style="green")
+    models_table.add_column("Created", justify="left", style="white")
+    models_table.add_column("Updated", justify="left", style="yellow")
 
     # Filter and sort missing models
     missing_models = sorted(
-        [model for model in local_models if model["filename"] in missing_in_db],
-        key=itemgetter("filename")
+        [model for model in filtered_db_models if model["name"] in missing_on_disk],
+        key=itemgetter("name"),
     )
 
     # Add entries for missing models
     for model in missing_models:
-        table.add_row(
-            model["filename"],
-            model["type"],
-            model["created"],
-            model["updated"],
+        metadata = model.get("metadata", {})
+        timestamps = model.get("Timestamps", {})
+        models_table.add_row(
+            model["name"],
+            metadata.get("type", "N/A"),
+            metadata.get("format", "N/A"),
+            metadata.get("path", "N/A"),
+            timestamps.get("created_at", "N/A"),
+            timestamps.get("updated_at", "N/A"),
         )
 
-    # Display the table
+    # Display the models_table
     if missing_models:
-        console.print(table)
+        console.print(models_table)
     else:
-        console.print("All local models are present in the database.")
+        console.print(
+            "All database models (LORA and checkpoint) with source_type:path are present on disk."
+        )
 
 
 def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
@@ -548,11 +557,12 @@ def display_local_models(model_info: List[Dict[str, Any]], display_tree: bool):
                 console.print(Panel(tree, expand=False))
                 console.print()
 
+
 def local_models_display(display_tree: bool = False) -> None:
     local_models = collect_model_info(MODELS_DIR)
     display_local_models(local_models, display_tree)
-    
-    
+
+
 def database_models_display() -> None:
     db = get_db(connection=True)
     invokeai_models = db.execute("SELECT * FROM models").fetchall()
@@ -560,15 +570,12 @@ def database_models_display() -> None:
     display_database_models(database_models)
 
 
-# def list_models_cli() -> None:
-#     db = get_db(connection=True)
-#     # display_model_info(collect_model_info(MODELS_DIR))
-#     invokeai_models = db.execute("SELECT * FROM models").fetchall()
-#     local_models = collect_model_info(MODELS_DIR)
-#     database_models = process_tuples(invokeai_models)
-#     compare_models(local_models, database_models)
-
-    # display_data(invokeai_models)
+def compare_models_display() -> None:
+    db = get_db(connection=True)
+    invokeai_models = db.execute("SELECT * FROM models").fetchall()
+    local_models = collect_model_info(MODELS_DIR)
+    database_models = process_tuples(invokeai_models)
+    compare_models(local_models, database_models)
 
 
 # ANCHOR: ABOUT FUNCTIONS START
