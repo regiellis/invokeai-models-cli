@@ -1,11 +1,8 @@
-import uuid
 import typer
 import shutil
 import os
-import math
 import json
 import inquirer
-import httpx
 import importlib.resources
 
 import tempfile
@@ -15,7 +12,13 @@ from datetime import datetime
 from typing import List, Dict, Any, Tuple, Union
 
 import sqlite3
-from .helpers import feedback_message, create_table, random_name
+from .helpers import (
+    feedback_message,
+    create_table,
+    random_name,
+    process_tuples,
+    tuple_to_dict,
+)
 
 from rich.markdown import Markdown
 from rich.progress import Progress
@@ -306,39 +309,84 @@ def ensure_snapshots_dir():
 # ANCHOR: DATABASE FUNCTIONS END
 
 
-def tuple_to_dict(input_tuple: Tuple) -> Dict[str, Any]:
-    keys = [
-        "key",
-        "hash",
-        "base",
-        "type",
-        "path",
-        "format",
-        "name",
-        "description",
-        "source",
-        "source_type",
-        "source_api_response",
-        "cover_image",
-        "metadata_json",
-        "created_at",
-        "updated_at",
-    ]
+def compare_models(
+    local_models: List[Dict[str, Any]], db_models: List[Dict[str, Any]]
+) -> None:
+    """
+    Compare local model files with database entries and display differences.
 
-    result = dict(zip(keys, input_tuple))
+    Args:
+    local_models (List[Dict[str, Any]]): Information about local model files.
+    db_models (List[Dict[str, Any]]): Information about models in the database.
+    """
 
-    # Parse the JSON string in metadata_json
-    if result["metadata_json"]:
-        result["metadata"] = json.loads(result["metadata_json"])
-        del result["metadata_json"]
-    else:
-        result["metadata"] = None
+    # Create sets for easy comparison
+    local_filenames = {model["filename"] for model in local_models}
+    db_filenames = {model["name"] for model in db_models}
 
-    return result
+    # Models present in local files but not in the database
+    missing_in_db = local_filenames - db_filenames
+    print("Models present locally but missing in the database:")
+    for filename in missing_in_db:
+        print(f"- {filename}")
+
+    # Models present in the database but not locally
+    missing_in_local = db_filenames - local_filenames
+    print("Models present in the database but missing locally:")
+    for filename in missing_in_local:
+        print(f"- {filename}")
 
 
-def process_tuples(tuple_list: List[Tuple]) -> List[Dict[str, Any]]:
-    return [tuple_to_dict(t) for t in tuple_list]
+def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
+    """
+    Collect information about model files in the specified directories.
+
+    Args:
+    models_dir (str): Path to the directory containing 'checkpoints' and 'lora' folders.
+
+    Returns:
+    List[Dict[str, Any]]: List of dictionaries containing information about each model file.
+    """
+    model_info = []
+    subdirs = ["checkpoints", "lora"]
+
+    for subdir in subdirs:
+        dir_path = os.path.join(models_dir, subdir)
+        if not os.path.isdir(dir_path):
+            continue
+
+        for root, _, files in os.walk(dir_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                relative_path = os.path.relpath(file_path, models_dir)
+
+                # Get file stats
+                stats = os.stat(file_path)
+                created = datetime.fromtimestamp(stats.st_ctime)
+                modified = datetime.fromtimestamp(stats.st_mtime)
+
+                # Determine type based on subdirectory
+                type_parts = relative_path.split(os.path.sep)[
+                    1:-1
+                ]  # Exclude the main subdir and filename
+                type_str = " ".join(
+                    part.replace("_", " ") for part in type_parts
+                ).lower()
+
+                model_info.append(
+                    {
+                        "filename": file,
+                        "file_path": file_path,
+                        "relative_path": relative_path,
+                        "type": (
+                            type_str if type_str else subdir.rstrip("s")
+                        ),  # Use subdir name if no subdirectories
+                        "created": created.isoformat(),
+                        "updated": modified.isoformat(),
+                    }
+                )
+
+    return model_info
 
 
 def display_data(data: List[Union[Dict[str, Any], Tuple]]):
@@ -414,10 +462,62 @@ def display_data(data: List[Union[Dict[str, Any], Tuple]]):
         console.print("\n")
 
 
+def display_model_info(model_info: List[Dict[str, Any]]):
+    """
+    Display the model information in a formatted, colorful output using rich.
+
+    Args:
+    model_info (List[Dict[str, Any]]): List of dictionaries containing model information.
+    """
+    console = Console()
+
+    # Group models by type
+    models_by_type = {}
+    for model in model_info:
+        model_type = model["type"]
+        if model_type not in models_by_type:
+            models_by_type[model_type] = []
+        models_by_type[model_type].append(model)
+
+    # Display models grouped by type
+    for model_type, models in models_by_type.items():
+        console.print(f"\n[bold blue]== {model_type.upper()} ==[/bold blue]")
+
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("Filename", style="cyan", no_wrap=True)
+        table.add_column("Relative Path", style="green")
+        table.add_column("Created", style="yellow")
+        table.add_column("Updated", style="yellow")
+
+        for model in models:
+            table.add_row(
+                model["filename"],
+                model["relative_path"],
+                model["created"],
+                model["updated"],
+            )
+
+        console.print(table)
+
+        # Display detailed information for each model
+        for model in models:
+            tree = Tree(f"[bold cyan]{model['filename']}[/bold cyan]")
+            tree.add(f"[yellow]Full Path:[/yellow] {model['file_path']}")
+            tree.add(f"[yellow]Relative Path:[/yellow] {model['relative_path']}")
+            tree.add(f"[yellow]Type:[/yellow] {model['type']}")
+            tree.add(f"[yellow]Created:[/yellow] {model['created']}")
+            tree.add(f"[yellow]Updated:[/yellow] {model['updated']}")
+
+            console.print(Panel(tree, expand=False))
+            console.print()
+
+
 def list_models_cli() -> None:
     db = get_db(connection=True)
-    current_models = db.execute("SELECT * FROM models").fetchall()
-    display_data(current_models)
+    display_model_info(collect_model_info(MODELS_DIR))
+    invokeai_models = db.execute("SELECT * FROM models").fetchall()
+
+    # display_data(invokeai_models)
 
 
 # ANCHOR: ABOUT FUNCTIONS START

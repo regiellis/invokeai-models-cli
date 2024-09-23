@@ -1,7 +1,8 @@
 import typer
 import random
+import json
 
-from typing import Dict, Any
+from typing import Dict, Any, Tuple, List
 from rich.console import Console
 from rich.table import Table
 
@@ -120,3 +121,38 @@ def add_rows_to_table(table: Table, data: Dict[str, Any]) -> None:
         if isinstance(value, list):
             value = ", ".join(map(str, value))
         table.add_row(key, str(value))
+
+
+def process_tuples(tuple_list: List[Tuple]) -> List[Dict[str, Any]]:
+    return [tuple_to_dict(t) for t in tuple_list]
+
+
+def tuple_to_dict(input_tuple: Tuple) -> Dict[str, Any]:
+    keys = [
+        "key",
+        "hash",
+        "base",
+        "type",
+        "path",
+        "format",
+        "name",
+        "description",
+        "source",
+        "source_type",
+        "source_api_response",
+        "cover_image",
+        "metadata_json",
+        "created_at",
+        "updated_at",
+    ]
+
+    result = dict(zip(keys, input_tuple))
+
+    # Parse the JSON string in metadata_json
+    if result["metadata_json"]:
+        result["metadata"] = json.loads(result["metadata_json"])
+        del result["metadata_json"]
+    else:
+        result["metadata"] = None
+
+    return result
