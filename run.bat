@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 REM Build the Docker image
-docker build -t invokeai-presets .
+docker build -t invokeai-models .
 
 REM Run the Docker container with the specified arguments
 docker run -it --rm ^
@@ -10,7 +10,7 @@ docker run -it --rm ^
     -v %cd%:/home/invokeaiuser ^
     -v %cd%/docker:/home/invokeaiuser/docker:ro ^
     -v \\.\pipe\docker_engine:/var/run/docker.sock ^
-    --name running-invokeai-presets invokeai-presets %* && ^
-    docker exec -it running-invokeai-presets pip install .
+    --name running-invokeai-models invokeai-models %* && ^
+    docker exec -it running-invokeai-models pip install .
 
 pause

@@ -17,7 +17,7 @@ ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH
 RUN pip install --upgrade pip setuptools wheel
 
 WORKDIR /home/invokeaiuser
-COPY ./.env /home/.config/invokeai-presets-itsjustregi/
+COPY ./.env /home/.config/invokeai-models-itsjustregi/
 COPY ./requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
