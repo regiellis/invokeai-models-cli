@@ -13,6 +13,7 @@ from unittest.mock import patch, MagicMock
 def runner():
     return CliRunner()
 
+
 @pytest.fixture
 def mock_db(tmp_path):
     # Create a temporary database file
@@ -23,7 +24,6 @@ def mock_db(tmp_path):
     conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
 
-    # Create the necessary tables (adjust according to your actual schema)
     cursor.execute(
         """
     CREATE TABLE IF NOT EXISTS models (
@@ -57,6 +57,7 @@ def mock_db(tmp_path):
     else:
         print(f"Warning: Database file {db_path} not found during cleanup")
 
+
 @pytest.fixture
 def mock_models_dir(tmp_path):
     models_dir = tmp_path / "models"
@@ -65,21 +66,25 @@ def mock_models_dir(tmp_path):
     (models_dir / "loras").mkdir()
     return models_dir
 
+
 @pytest.fixture
 def mock_snapshots_dir(tmp_path):
     snapshots_dir = tmp_path / "snapshots"
     snapshots_dir.mkdir()
     return snapshots_dir
 
+
 def strip_ansi(text):
     ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
     return ansi_escape.sub("", text)
+
 
 def simplify_rich_output(text):
     text = strip_ansi(text)
     text = re.sub(r"[│├─┤┌┐└┘┏┓┗┛]", "+", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
+
 
 def test_compare_models(runner, mock_db, mock_models_dir, mock_snapshots_dir):
     # Insert some sample data into the mock database
@@ -90,17 +95,28 @@ def test_compare_models(runner, mock_db, mock_models_dir, mock_snapshots_dir):
         INSERT INTO models (key, hash, name, type, path, format, source_type)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        ('model1_key', 'hash1', 'model1', 'checkpoint', '/path/to/model1', 'safetensors', 'path')
+        (
+            "model1_key",
+            "hash1",
+            "model1",
+            "checkpoint",
+            "/path/to/model1",
+            "safetensors",
+            "path",
+        ),
     )
     conn.commit()
     conn.close()
 
-    with patch('invokeai_models_cli.cli.MODELS_DIR', str(mock_models_dir)), \
-         patch('invokeai_models_cli.cli.SNAPSHOTS_DIR', str(mock_snapshots_dir)):
+    with (
+        patch("invokeai_models_cli.cli.MODELS_DIR", str(mock_models_dir)),
+        patch("invokeai_models_cli.cli.SNAPSHOTS_DIR", str(mock_snapshots_dir)),
+    ):
         result = runner.invoke(invoke_models_cli, ["compare"])
         simplified_output = simplify_rich_output(result.stdout)
         assert result.exit_code == 0
         assert "Models in Database but Not on Disk" in simplified_output
+
 
 def test_sync_models(runner, mock_db, mock_models_dir, mock_snapshots_dir):
     # Insert some sample data into the mock database
@@ -111,53 +127,77 @@ def test_sync_models(runner, mock_db, mock_models_dir, mock_snapshots_dir):
         INSERT INTO models (key, hash, name, type, path, format, source_type)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        ('model1_key', 'hash1', 'model1', 'checkpoint', '/path/to/model1', 'safetensors', 'path')
+        (
+            "model1_key",
+            "hash1",
+            "model1",
+            "checkpoint",
+            "/path/to/model1",
+            "safetensors",
+            "path",
+        ),
     )
     conn.commit()
     conn.close()
 
-    with patch('invokeai_models_cli.cli.MODELS_DIR', str(mock_models_dir)), \
-         patch('invokeai_models_cli.cli.SNAPSHOTS_DIR', str(mock_snapshots_dir)), \
-         patch('builtins.input', return_value='y'):  # Simulate user confirming sync
+    with (
+        patch("invokeai_models_cli.cli.MODELS_DIR", str(mock_models_dir)),
+        patch("invokeai_models_cli.cli.SNAPSHOTS_DIR", str(mock_snapshots_dir)),
+        patch("builtins.input", return_value="y"),
+    ):  # Simulate user confirming sync
         result = runner.invoke(invoke_models_cli, ["sync"])
         simplified_output = simplify_rich_output(result.stdout)
         assert result.exit_code == 0
-        assert "Sync operation completed successfully" in simplified_output or "All database models are in sync" in simplified_output
+        assert (
+            "Sync operation completed successfully" in simplified_output
+            or "All database models are in sync" in simplified_output
+        )
+
 
 @pytest.mark.parametrize("cache_type", ["local_models", "database_models"])
-def test_cache_creation(runner, mock_db, mock_models_dir, mock_snapshots_dir, cache_type):
+def test_cache_creation(
+    runner, mock_db, mock_models_dir, mock_snapshots_dir, cache_type
+):
     cache_file = mock_snapshots_dir / f"{cache_type}_cache.json"
-    with patch('invokeai_models_cli.cli.MODELS_DIR', str(mock_models_dir)), \
-         patch('invokeai_models_cli.cli.SNAPSHOTS_DIR', str(mock_snapshots_dir)):
+    with (
+        patch("invokeai_models_cli.cli.MODELS_DIR", str(mock_models_dir)),
+        patch("invokeai_models_cli.cli.SNAPSHOTS_DIR", str(mock_snapshots_dir)),
+    ):
         result = runner.invoke(invoke_models_cli, ["compare"])
         assert result.exit_code == 0
         assert cache_file.exists()
+
 
 def test_cache_usage(runner, mock_db, mock_models_dir, mock_snapshots_dir):
     cache_file = mock_snapshots_dir / "local_models_cache.json"
     mock_data = {
         "last_updated": "2023-01-01T00:00:00",
-        "data": [{"name": "test_model", "type": "checkpoint"}]
+        "data": [{"name": "test_model", "type": "checkpoint"}],
     }
     cache_file.write_text(json.dumps(mock_data))
 
-    with patch('invokeai_models_cli.cli.MODELS_DIR', str(mock_models_dir)), \
-         patch('invokeai_models_cli.cli.SNAPSHOTS_DIR', str(mock_snapshots_dir)):
+    with (
+        patch("invokeai_models_cli.cli.MODELS_DIR", str(mock_models_dir)),
+        patch("invokeai_models_cli.cli.SNAPSHOTS_DIR", str(mock_snapshots_dir)),
+    ):
         result = runner.invoke(invoke_models_cli, ["compare"])
         simplified_output = simplify_rich_output(result.stdout)
         assert result.exit_code == 0
         assert "test_model" in simplified_output
 
+
 def test_cache_update(runner, mock_db, mock_models_dir, mock_snapshots_dir):
     cache_file = mock_snapshots_dir / "local_models_cache.json"
     old_data = {
         "last_updated": "2000-01-01T00:00:00",  # Very old date to force update
-        "data": [{"name": "old_model", "type": "checkpoint"}]
+        "data": [{"name": "old_model", "type": "checkpoint"}],
     }
     cache_file.write_text(json.dumps(old_data))
 
-    with patch('invokeai_models_cli.cli.MODELS_DIR', str(mock_models_dir)), \
-         patch('invokeai_models_cli.cli.SNAPSHOTS_DIR', str(mock_snapshots_dir)):
+    with (
+        patch("invokeai_models_cli.cli.MODELS_DIR", str(mock_models_dir)),
+        patch("invokeai_models_cli.cli.SNAPSHOTS_DIR", str(mock_snapshots_dir)),
+    ):
         result = runner.invoke(invoke_models_cli, ["compare"])
         assert result.exit_code == 0
 
@@ -165,11 +205,13 @@ def test_cache_update(runner, mock_db, mock_models_dir, mock_snapshots_dir):
     updated_cache = json.loads(cache_file.read_text())
     assert updated_cache["last_updated"] > old_data["last_updated"]
 
+
 def test_nonexistent_command(runner):
     result = runner.invoke(invoke_models_cli, ["nonexistent"])
     simplified_output = simplify_rich_output(result.stdout)
     assert result.exit_code != 0
     assert "No such command" in simplified_output
+
 
 def test_invalid_option(runner):
     result = runner.invoke(invoke_models_cli, ["compare", "--invalid-option"])

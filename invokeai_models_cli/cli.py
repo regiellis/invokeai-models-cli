@@ -12,6 +12,7 @@ from .functions import (
     local_models_display,
     compare_models_display,
     sync_models_commands,
+    update_cache,
     about_cli,
 )
 
@@ -98,6 +99,14 @@ def database_restore_command():
     restore_snapshot()
 
 
+@invoke_models_cli.command("update-cache")
+def update_cache_command():
+    """
+    Manually update both local and database model caches.
+    """
+    update_cache(display=True)
+
+
 @invoke_models_cli.command("local-models", help="List local models files.")
 def local_models_command(
     display_tree: bool = typer.Option(
@@ -115,7 +124,7 @@ def database_models_command():
 @invoke_models_cli.command("compare-models", help="List models in the database.")
 def compare_models_command():
     compare_models_display()
-    
+
 
 @invoke_models_cli.command(
     "sync-models", help="Sync database models with local model files."

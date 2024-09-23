@@ -45,42 +45,83 @@ __all__ = [
     "restore_snapshot",
 ]
 
+# TODO - Need to break this file in to multiple files
 
-def get_db(connection: bool) -> Any:
+
+def get_db(connection: bool = False) -> Union[sqlite3.Connection, sqlite3.Cursor]:
     database = sqlite3.connect(DATABASE_PATH)
     if connection:
         return database
     return database.cursor()
 
+
 def get_database_models() -> List[Dict[str, Any]]:
-    cached_data = manage_cache('database_models')
+    cached_data = manage_cache("database_models")
     if cached_data is not None:
         return cached_data
 
-    db_models = process_tuples(get_db(connection=True).execute("SELECT * FROM models").fetchall())
-    return manage_cache('database_models', db_models)
+    db_models = process_tuples(
+        get_db(connection=True).execute("SELECT * FROM models").fetchall()
+    )
+    return manage_cache("database_models", db_models)
 
-def manage_cache(cache_type: str, data: List[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+
+import os
+
+
+def update_cache(display: bool = True) -> None:
+    """
+    Manually update both local and database model caches.
+    Deletes existing cache files before creating new ones.
+    """
+    # TODO - Cache was not updating correctly, need to figure out why, deleting and recreating works fine
+    # Delete existing cache files
+    for cache_type in ["local_models", "database_models"]:
+        cache_file = os.path.join(SNAPSHOTS_DIR, f"{cache_type}_cache.json")
+        if os.path.exists(cache_file):
+            os.remove(cache_file)
+            # if display:
+            #     feedback_message("Deleted existing cache file.", "success")
+
+    # Update local models cache
+    local_models = collect_model_info(MODELS_DIR)
+    manage_cache("local_models", local_models)
+
+    # Update database models cache
+    db_models = process_tuples(
+        get_db(connection=True).execute("SELECT * FROM models").fetchall()
+    )
+    manage_cache("database_models", db_models)
+
+    if display:
+        feedback_message("Successfully updated cache.", "success")
+
+
+def manage_cache(
+    cache_type: str, data: List[Dict[str, Any]] = None
+) -> List[Dict[str, Any]]:
     cache_file = os.path.join(SNAPSHOTS_DIR, f"{cache_type}_cache.json")
     current_time = datetime.now()
 
-    if os.path.exists(cache_file):
-        with open(cache_file, 'r') as f:
-            cache = json.load(f)
-        
-        last_updated = datetime.fromisoformat(cache['last_updated'])
-        if current_time - last_updated < timedelta(weeks=1):
-            return cache['data']
-
     if data is not None:
-        cache = {
-            'last_updated': current_time.isoformat(),
-            'data': data
-        }
-        with open(cache_file, 'w') as f:
+        # Always update the cache when new data is provided
+        cache = {"last_updated": current_time.isoformat(), "data": data}
+        with open(cache_file, "w") as f:
             json.dump(cache, f, indent=2)
+        return data
 
-    return data
+    if os.path.exists(cache_file):
+        with open(cache_file, "r") as f:
+            cache = json.load(f)
+
+        last_updated = datetime.fromisoformat(cache["last_updated"])
+        if current_time - last_updated < timedelta(
+            hours=1
+        ):  # Reduced cache lifetime to 1 hour
+            return cache["data"]
+
+    # If we reach here, either the cache doesn't exist or it's too old
+    return None
 
 
 # ANCHOR: DATABASE FUNCTIONS START
@@ -347,6 +388,7 @@ def filter_and_compare_models(
     List[Dict[str, Any]]: List of models in the database but not on disk.
     """
     # Filter db_models to only include relevant models
+    update_cache(display=False)
     filtered_db_models = [
         model
         for model in db_models
@@ -402,9 +444,7 @@ def display_missing_models(missing_models: List[Dict[str, Any]]) -> None:
     if missing_models:
         console.print(models_table)
     else:
-        console.print(
-            "All database models (LORA and checkpoint) are present on disk."
-        )
+        console.print("All database models (LORA and checkpoint) are present on disk.")
 
 
 def sync_models(
@@ -450,8 +490,8 @@ def sync_models(
 
     # Perform sync operation
     perform_sync(models_to_sync, local_models)
-    manage_cache('local_models', collect_model_info(MODELS_DIR))
-    manage_cache('database_models', get_database_models())
+    manage_cache("local_models", collect_model_info(MODELS_DIR))
+    manage_cache("database_models", get_database_models())
 
 
 def select_models_to_sync(missing_models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -488,44 +528,58 @@ def perform_sync(
     models_to_sync (List[Dict[str, Any]]): List of models to sync.
     local_models (List[Dict[str, Any]]): Information about local model files.
     """
-    db = get_db(connection=False) # returning cursor instead of connection
+    db_conn = get_db(connection=True)
+    cursor = db_conn.cursor()
 
-    for model in models_to_sync:
-        local_model = next(
-            (m for m in local_models if m["name"] == model["name"]), None
-        )
-        if local_model:
-            # Update path
-            new_path = local_model["file_path"]
-            db.execute(
-                "UPDATE models SET path = ? WHERE name = ?", (new_path, model["name"])
+    try:
+        for model in models_to_sync:
+            local_model = next(
+                (m for m in local_models if m["name"] == model["name"]), None
             )
-            feedback_message(f"Updated path for model: {model['name']}", "success")
-        else:
-            # Delete model from database
-            db.execute("DELETE FROM models WHERE name = ?", (model["name"],))
-            feedback_message(f"Deleted model from database: {model['name']}", "warning")
+            if local_model:
+                # Update path
+                new_path = local_model["file_path"]
+                cursor.execute(
+                    "UPDATE models SET path = ? WHERE name = ?",
+                    (new_path, model["name"]),
+                )
+                feedback_message(f"Updated path for model: {model['name']}", "success")
+            else:
+                # Delete model from database
+                cursor.execute("DELETE FROM models WHERE name = ?", (model["name"],))
+                feedback_message(
+                    f"Deleted model from database: {model['name']}", "warning"
+                )
 
-    db.commit()
-    db.close()
-    feedback_message("Sync operation completed successfully.", "success")
+        db_conn.commit()
+        feedback_message("Sync operation completed successfully.", "success")
+    except sqlite3.Error as e:
+        db_conn.rollback()
+        feedback_message(
+            f"Error during sync operation: {str(e)}. Changes rolled back.", "error"
+        )
+    finally:
+        db_conn.close()
 
 
 def compare_models_display() -> None:
     """Compare and display local and database models."""
-    local_models = collect_model_info(MODELS_DIR)
-    db_models = get_database_models()
+    # Always update the cache before comparing
+
+    local_models = manage_cache("local_models")
+    db_models = manage_cache("database_models")
+
     missing_models = filter_and_compare_models(local_models, db_models)
     display_missing_models(missing_models)
 
     if missing_models:
         questions = [
-            inquirer.Confirm('sync',
-                             message="Would you like to sync these models?",
-                             default=False),
+            inquirer.Confirm(
+                "sync", message="Would you like to sync these models?", default=False
+            ),
         ]
         answers = inquirer.prompt(questions)
-        if answers['sync']:
+        if answers["sync"]:
             sync_models(local_models, db_models)
 
 
@@ -555,10 +609,10 @@ def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
     List[Dict[str, Any]]: List of dictionaries containing information about each model file
     with .safetensor extension.
     """
-    cached_data = manage_cache('local_models')
+    cached_data = manage_cache("local_models")
     if cached_data is not None:
         return cached_data
-    
+
     model_info = []
     subdirs = ["checkpoints", "loras"]
 
@@ -603,7 +657,7 @@ def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
                     }
                 )
 
-    return manage_cache('local_models', model_info)
+    return manage_cache("local_models", model_info)
 
 
 def display_database_models(data: List[Union[Dict[str, Any], Tuple]]) -> None:
@@ -748,11 +802,13 @@ def compare_models_display() -> None:
     local_models = collect_model_info(MODELS_DIR)
     database_models = process_tuples(invokeai_models)
     compare_models(local_models, database_models)
-    
+
 
 def sync_models_commands():
     local_models = collect_model_info(MODELS_DIR)
-    db_models = process_tuples(get_db(connection=True).execute("SELECT * FROM models").fetchall())
+    db_models = process_tuples(
+        get_db(connection=True).execute("SELECT * FROM models").fetchall()
+    )
     sync_models(local_models, db_models)
 
 
