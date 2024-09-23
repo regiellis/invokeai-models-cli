@@ -1,0 +1,8 @@
+typer
+rich
+httpx
+shellingham
+python-dotenv
+inquirer
+packaging
+pytest

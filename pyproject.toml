@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "invokeai_models_cli"
+authors = [
+    {name = "Regi E",email = "regi@bynine.io"}
+]
+keywords = ["cli", "ai", "generative-ai", "invokeai"]
+dynamic = ["version"]
+description = "CLI tool for working with the external models and the InvokeAI database"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+classifiers = [
+   "Programming Language :: Python :: 3.10",
+   "License :: OSI Approved :: Apache Software License",
+   "Operating System :: OS Independent"
+]
+dependencies = [
+    "typer",
+    "rich",
+    "shellingham",
+    "httpx",
+    "python-dotenv",
+    "inquirer",
+    "packaging",
+    "pytest"
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+
+[tool.hatch.version]
+path = "invokeai_models_cli/__version__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["invokeai_models_cli"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/invokeai_models_cli",
+]
+
+[tool.hatch.build]
+include = [
+    "invokeai_models_cli/snapshots/*",
+]
+
+
+[project.urls]
+Repository = "https://github.com/regiellis/invokeai_models_cli"
+Documentation = "https://github.com/regiellis/invokeai_models_cli/blob/main/README.md"
+"Bug Tracker" = "https://github.com/regiellis/invokeai_models_cli/issues"
+
+[project.scripts]
+invokeai-models = "invokeai_models_cli.__main__:main"
+
