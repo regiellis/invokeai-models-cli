@@ -20,6 +20,7 @@ from .helpers import (
     tuple_to_dict,
 )
 
+from operator import itemgetter
 from rich.markdown import Markdown
 from rich.progress import Progress
 from rich.table import Table
@@ -308,6 +309,15 @@ def ensure_snapshots_dir():
 
 # ANCHOR: DATABASE FUNCTIONS END
 
+def filter_unmatched(
+    local_models: List[Dict[str, Any]], db_models: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    set_local = set(local_models)
+    set_db = set(db_models)
+    unmatched = list(set_local.symmetric_difference(set_db))
+
+    return unmatched
+
 
 def compare_models(
     local_models: List[Dict[str, Any]], db_models: List[Dict[str, Any]]
@@ -321,20 +331,41 @@ def compare_models(
     """
 
     # Create sets for easy comparison
-    local_filenames = {model["filename"] for model in local_models}
+    local_filenames = {model["name"] for model in local_models}
     db_filenames = {model["name"] for model in db_models}
 
     # Models present in local files but not in the database
     missing_in_db = local_filenames - db_filenames
-    print("Models present locally but missing in the database:")
-    for filename in missing_in_db:
-        print(f"- {filename}")
+    
+    # Prepare a table to display the results
+    console = Console()
+    table = Table(title="Local Models Missing in Database")
 
-    # Models present in the database but not locally
-    missing_in_local = db_filenames - local_filenames
-    print("Models present in the database but missing locally:")
-    for filename in missing_in_local:
-        print(f"- {filename}")
+    table.add_column("Filename", justify="left", style="cyan")
+    table.add_column("Type", justify="left", style="magenta")
+    table.add_column("Created", justify="left", style="green")
+    table.add_column("Updated", justify="left", style="yellow")
+
+    # Filter and sort missing models
+    missing_models = sorted(
+        [model for model in local_models if model["filename"] in missing_in_db],
+        key=itemgetter("filename")
+    )
+
+    # Add entries for missing models
+    for model in missing_models:
+        table.add_row(
+            model["filename"],
+            model["type"],
+            model["created"],
+            model["updated"],
+        )
+
+    # Display the table
+    if missing_models:
+        console.print(table)
+    else:
+        console.print("All local models are present in the database.")
 
 
 def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
@@ -345,10 +376,10 @@ def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
     models_dir (str): Path to the directory containing 'checkpoints' and 'lora' folders.
 
     Returns:
-    List[Dict[str, Any]]: List of dictionaries containing information about each model file.
+    List[Dict[str, Any]]: List of dictionaries containing information about each model file with .safetensor extension.
     """
     model_info = []
-    subdirs = ["checkpoints", "lora"]
+    subdirs = ["checkpoints", "loras"]
 
     for subdir in subdirs:
         dir_path = os.path.join(models_dir, subdir)
@@ -357,6 +388,10 @@ def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
 
         for root, _, files in os.walk(dir_path):
             for file in files:
+                # Only process files with .safetensors extension
+                if not file.endswith(".safetensors"):
+                    continue
+
                 file_path = os.path.join(root, file)
                 relative_path = os.path.relpath(file_path, models_dir)
 
@@ -376,6 +411,7 @@ def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
                 model_info.append(
                     {
                         "filename": file,
+                        "name": os.path.splitext(file)[0],
                         "file_path": file_path,
                         "relative_path": relative_path,
                         "type": (
@@ -389,7 +425,7 @@ def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
     return model_info
 
 
-def display_data(data: List[Union[Dict[str, Any], Tuple]]):
+def display_database_models(data: List[Union[Dict[str, Any], Tuple]]) -> None:
     console = Console()
 
     for item in data:
@@ -462,7 +498,7 @@ def display_data(data: List[Union[Dict[str, Any], Tuple]]):
         console.print("\n")
 
 
-def display_model_info(model_info: List[Dict[str, Any]]):
+def display_local_models(model_info: List[Dict[str, Any]], display_tree: bool):
     """
     Display the model information in a formatted, colorful output using rich.
 
@@ -500,22 +536,37 @@ def display_model_info(model_info: List[Dict[str, Any]]):
         console.print(table)
 
         # Display detailed information for each model
-        for model in models:
-            tree = Tree(f"[bold cyan]{model['filename']}[/bold cyan]")
-            tree.add(f"[yellow]Full Path:[/yellow] {model['file_path']}")
-            tree.add(f"[yellow]Relative Path:[/yellow] {model['relative_path']}")
-            tree.add(f"[yellow]Type:[/yellow] {model['type']}")
-            tree.add(f"[yellow]Created:[/yellow] {model['created']}")
-            tree.add(f"[yellow]Updated:[/yellow] {model['updated']}")
+        if display_tree:
+            for model in models:
+                tree = Tree(f"[bold cyan]{model['filename']}[/bold cyan]")
+                tree.add(f"[yellow]Full Path:[/yellow] {model['file_path']}")
+                tree.add(f"[yellow]Relative Path:[/yellow] {model['relative_path']}")
+                tree.add(f"[yellow]Type:[/yellow] {model['type']}")
+                tree.add(f"[yellow]Created:[/yellow] {model['created']}")
+                tree.add(f"[yellow]Updated:[/yellow] {model['updated']}")
 
-            console.print(Panel(tree, expand=False))
-            console.print()
+                console.print(Panel(tree, expand=False))
+                console.print()
 
-
-def list_models_cli() -> None:
+def local_models_display(display_tree: bool = False) -> None:
+    local_models = collect_model_info(MODELS_DIR)
+    display_local_models(local_models, display_tree)
+    
+    
+def database_models_display() -> None:
     db = get_db(connection=True)
-    display_model_info(collect_model_info(MODELS_DIR))
     invokeai_models = db.execute("SELECT * FROM models").fetchall()
+    database_models = process_tuples(invokeai_models)
+    display_database_models(database_models)
+
+
+# def list_models_cli() -> None:
+#     db = get_db(connection=True)
+#     # display_model_info(collect_model_info(MODELS_DIR))
+#     invokeai_models = db.execute("SELECT * FROM models").fetchall()
+#     local_models = collect_model_info(MODELS_DIR)
+#     database_models = process_tuples(invokeai_models)
+#     compare_models(local_models, database_models)
 
     # display_data(invokeai_models)
 

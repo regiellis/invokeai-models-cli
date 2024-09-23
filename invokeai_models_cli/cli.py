@@ -8,7 +8,9 @@ from .functions import (
     delete_snapshot,
     restore_snapshot,
     create_snapshot,
-    list_models_cli,
+    database_models_display,
+    local_models_display,
+    # list_models_cli,
     about_cli,
 )
 
@@ -84,14 +86,28 @@ def database_delete_command():
 )
 def database_restore_command():
     restore_snapshot()
+    
+
+@invoke_models_cli.command("local-models", help="List local models files.")
+def local_models_command(
+    display_tree: bool = typer.Option(
+        False, "--tree", "-t", help="Display the model tree"
+    )
+):
+    local_models_display(display_tree=display_tree)
 
 
-@invoke_models_cli.command(
-    "list",
-    help="List models in the database, but no longer on disk.",
-)
-def list_command():
-    list_models_cli()
+@invoke_models_cli.command("database-models", help="List models in the database.")
+def database_models_command():
+    database_models_display()
+
+
+# @invoke_models_cli.command(
+#     "list",
+#     help="List models in the database, but no longer on disk.",
+# )
+# def list_command():
+#     list_models_cli()
 
 
 @invoke_models_cli.command("about", help="Functions for information on this tool.")
