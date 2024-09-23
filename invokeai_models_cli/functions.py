@@ -4,13 +4,10 @@ import os
 import json
 import inquirer
 import importlib.resources
-
 import tempfile
-
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Any, Tuple, Union
-
 import sqlite3
 from .helpers import (
     feedback_message,
@@ -19,7 +16,6 @@ from .helpers import (
     process_tuples,
     tuple_to_dict,
 )
-
 from operator import itemgetter
 from rich.markdown import Markdown
 from rich.progress import Progress
@@ -27,7 +23,6 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.tree import Tree
 from rich.console import Console
-
 from rich.traceback import install
 
 install()
@@ -38,7 +33,6 @@ console = Console()
 
 # Get the package directory
 PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 DATABASE_PATH = os.path.join(INVOKE_AI_DIR, "databases", "invokeai.db")
 SNAPSHOTS_DIR = os.path.join(PACKAGE_DIR, "snapshots")
 SNAPSHOTS_JSON = os.path.join(SNAPSHOTS_DIR, "snapshots.json")
@@ -56,7 +50,6 @@ def get_db(connection: bool) -> Any:
     database = sqlite3.connect(DATABASE_PATH)
     if connection:
         return database
-
     return database.cursor()
 
 
@@ -325,25 +318,28 @@ def filter_and_compare_models(
     """
     # Filter db_models to only include relevant models
     filtered_db_models = [
-        model for model in db_models
+        model
+        for model in db_models
         if model.get("metadata", {}).get("source_type") == "path"
-        and model.get("metadata", {}).get("format", "").lower() in ["lora", "checkpoint"]
+        and model.get("metadata", {}).get("format", "").lower()
+        in ["lora", "checkpoint"]
     ]
 
     # Create sets for easy comparison
     local_filenames = {model["name"] for model in local_models}
     db_filenames = {model["name"] for model in filtered_db_models}
-    
+
     # Models present in the database but not in local files
     missing_on_disk = db_filenames - local_filenames
-    
+
     # Filter and sort missing models
     missing_models = sorted(
         [model for model in filtered_db_models if model["name"] in missing_on_disk],
-        key=itemgetter("name")
+        key=itemgetter("name"),
     )
 
     return missing_models
+
 
 def display_missing_models(missing_models: List[Dict[str, Any]]) -> None:
     """
@@ -352,7 +348,6 @@ def display_missing_models(missing_models: List[Dict[str, Any]]) -> None:
     Args:
     missing_models (List[Dict[str, Any]]): List of models missing on disk.
     """
-    console = Console()
     models_table = Table(title="Models in Database but Not on Disk")
 
     models_table.add_column("Name", justify="left", style="yellow")
@@ -377,7 +372,132 @@ def display_missing_models(missing_models: List[Dict[str, Any]]) -> None:
     if missing_models:
         console.print(models_table)
     else:
-        console.print("All database models (LORA and checkpoint) with source_type:path are present on disk.")
+        console.print(
+            "All database models (LORA and checkpoint) are present on disk."
+        )
+
+
+def sync_models(
+    local_models: List[Dict[str, Any]], db_models: List[Dict[str, Any]]
+) -> None:
+    """
+    Sync database models with local model files.
+
+    Args:
+    local_models (List[Dict[str, Any]]): Information about local model files.
+    db_models (List[Dict[str, Any]]): Information about models in the database.
+    """
+    missing_models = filter_and_compare_models(local_models, db_models)
+
+    if not missing_models:
+        console.print("All database models are in sync with local files.")
+        return
+
+    console.print("[yellow]Warning: This operation will modify the database.[/yellow]")
+    console.print("A snapshot will be created before any changes are made.")
+
+    # Create a snapshot
+    create_snapshot()
+
+    # Ask user for sync method
+    questions = [
+        inquirer.List(
+            "sync_method",
+            message="How would you like to sync the models?",
+            choices=["Automatically", "Manually select models"],
+        ),
+    ]
+    answers = inquirer.prompt(questions)
+
+    if answers["sync_method"] == "Manually select models":
+        models_to_sync = select_models_to_sync(missing_models)
+    else:
+        models_to_sync = missing_models
+
+    if not models_to_sync:
+        console.print("No models selected for sync. Operation cancelled.")
+        return
+
+    # Perform sync operation
+    perform_sync(models_to_sync, local_models)
+
+
+def select_models_to_sync(missing_models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Allow user to manually select models to sync.
+
+    Args:
+    missing_models (List[Dict[str, Any]]): List of models missing from local files.
+
+    Returns:
+    List[Dict[str, Any]]: List of selected models to sync.
+    """
+    choices = [
+        f"{model['name']} ({model.get('metadata', {}).get('format', 'Unknown')})"
+        for model in missing_models
+    ]
+    questions = [
+        inquirer.Checkbox(
+            "selected_models", message="Select models to sync", choices=choices
+        ),
+    ]
+    answers = inquirer.prompt(questions)
+    selected_names = [name.split(" (")[0] for name in answers["selected_models"]]
+    return [model for model in missing_models if model["name"] in selected_names]
+
+
+def perform_sync(
+    models_to_sync: List[Dict[str, Any]], local_models: List[Dict[str, Any]]
+) -> None:
+    """
+    Perform the actual sync operation on the database.
+
+    Args:
+    models_to_sync (List[Dict[str, Any]]): List of models to sync.
+    local_models (List[Dict[str, Any]]): Information about local model files.
+    """
+    db = get_db(connection=False) # returning cursor instead of connection
+
+    for model in models_to_sync:
+        local_model = next(
+            (m for m in local_models if m["name"] == model["name"]), None
+        )
+        if local_model:
+            # Update path
+            new_path = local_model["file_path"]
+            db.execute(
+                "UPDATE models SET path = ? WHERE name = ?", (new_path, model["name"])
+            )
+            feedback_message(f"Updated path for model: {model['name']}", "success")
+        else:
+            # Delete model from database
+            db.execute("DELETE FROM models WHERE name = ?", (model["name"],))
+            feedback_message(f"Deleted model from database: {model['name']}", "warning")
+
+    db.commit()
+    db.close()
+    feedback_message("Sync operation completed successfully.", "success")
+
+
+def compare_models_display() -> None:
+    """Compare and display local and database models."""
+    local_models = collect_model_info(MODELS_DIR)
+    db_models = process_tuples(
+        get_db(connection=True).execute("SELECT * FROM models").fetchall()
+    )
+    missing_models = filter_and_compare_models(local_models, db_models)
+    display_missing_models(missing_models)
+
+    if missing_models:
+        questions = [
+            inquirer.Confirm(
+                "sync", message="Would you like to sync these models?", default=False
+            ),
+        ]
+        answers = inquirer.prompt(questions)
+        if answers["sync"]:
+            sync_models(local_models, db_models)
+
 
 def compare_models(
     local_models: List[Dict[str, Any]], db_models: List[Dict[str, Any]]
@@ -402,7 +522,7 @@ def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
     models_dir (str): Path to the directory containing 'checkpoints' and 'lora' folders.
 
     Returns:
-    List[Dict[str, Any]]: List of dictionaries containing information about each model file 
+    List[Dict[str, Any]]: List of dictionaries containing information about each model file
     with .safetensor extension.
     """
     model_info = []
@@ -594,6 +714,12 @@ def compare_models_display() -> None:
     local_models = collect_model_info(MODELS_DIR)
     database_models = process_tuples(invokeai_models)
     compare_models(local_models, database_models)
+    
+
+def sync_models_commands():
+    local_models = collect_model_info(MODELS_DIR)
+    db_models = process_tuples(get_db(connection=True).execute("SELECT * FROM models").fetchall())
+    sync_models(local_models, db_models)
 
 
 # ANCHOR: ABOUT FUNCTIONS START

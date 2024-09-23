@@ -11,6 +11,7 @@ from .functions import (
     database_models_display,
     local_models_display,
     compare_models_display,
+    sync_models_commands,
     about_cli,
 )
 
@@ -105,6 +106,13 @@ def database_models_command():
 @invoke_models_cli.command("compare-models", help="List models in the database.")
 def compare_models_command():
     compare_models_display()
+    
+
+@invoke_models_cli.command(
+    "sync-models", help="Sync database models with local model files."
+)
+def sync_models_command():
+    sync_models_commands()
 
 
 # @invoke_models_cli.command(
