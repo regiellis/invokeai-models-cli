@@ -48,7 +48,7 @@ __all__ = [
 
 
 def get_db(connection: bool = False) -> Union[sqlite3.Connection, sqlite3.Cursor]:
-    #TODO - Move this to a helper file
+    # TODO - Move this to a helper file
     database = sqlite3.connect(DATABASE_PATH)
     if connection:
         return database
@@ -56,7 +56,7 @@ def get_db(connection: bool = False) -> Union[sqlite3.Connection, sqlite3.Cursor
 
 
 def get_database_models() -> List[Dict[str, Any]]:
-    #TODO - Move this to a helper file
+    # TODO - Move this to a helper file
     cached_data = manage_cache("database_models")
     if cached_data is not None:
         return cached_data
@@ -66,6 +66,7 @@ def get_database_models() -> List[Dict[str, Any]]:
     )
     return manage_cache("database_models", db_models)
 
+
 # ANCHOR - CACHE FUNCTIONS START
 def update_cache(display: bool = True) -> None:
     """
@@ -73,7 +74,7 @@ def update_cache(display: bool = True) -> None:
     Deletes existing cache files before creating new ones.
     """
     # TODO - Cache was not updating correctly, need to figure out why, deleting and recreating works fine
-    
+
     # Delete existing cache files
     for cache_type in ["local_models", "database_models"]:
         cache_file = os.path.join(SNAPSHOTS_DIR, f"{cache_type}_cache.json")
@@ -121,6 +122,7 @@ def manage_cache(
 
     # If we reach here, either the cache doesn't exist or it's too old
     return None
+
 
 # ANCHOR - CACHE FUNCTIONS END
 
@@ -373,6 +375,7 @@ def ensure_snapshots_dir():
 
 
 # ANCHOR: DATABASE FUNCTIONS END
+
 
 # ANCHOR: FILTER FUNCTIONS START
 def filter_and_compare_models(
