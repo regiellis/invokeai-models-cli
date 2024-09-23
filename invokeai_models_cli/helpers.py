@@ -9,14 +9,14 @@ from rich.table import Table
 console = Console(soft_wrap=True)
 
 __all__ = [
-    "feedback_message", 
-    "create_table", 
-    "add_rows_to_table", 
+    "feedback_message",
+    "create_table",
+    "add_rows_to_table",
     "random_name",
     "process_tuples",
     "tuple_to_dict",
     "get_db",
-    ]
+]
 
 # function that creates random names and rturns them
 

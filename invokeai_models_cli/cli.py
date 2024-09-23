@@ -22,15 +22,15 @@ install()
 
 
 """
-=========================================================================
-Invoke Models CLI - Simplified Tool working with orphaned Invoke AI models
-=========================================================================
+==============================================================================
+Invoke Models CLI - Simplified Tool for working with orphaned Invoke AI models
+==============================================================================
 
-Invoke modelsis a simplified tool for working with orphaned Invoke AI models
-left in the database after the external source has been deleted. It allows
+Invoke models CLI is a simplified tool for working with orphaned Invoke AI models
+left in the database after they have been deleted by a external source. It allows
 you to list, compare, and delete models automatically or via a selection menu.
 
-Wrote this tool to solve a personal pain  point with orphaned external models
+Wrote this tool to solve a personal pain point with orphaned external models
 that are not managed by Invoke AI. This tool is not a replacement for the
 official Invoke AI web ui.
 
@@ -55,8 +55,9 @@ invokeai-models database-models
 invokeai-models about
 """
 
-__all__ = ["invoke_models_cli"]
 __version__ = __version__
+__all__ = ["invoke_models_cli"]
+
 
 invoke_models_cli = typer.Typer()
 database_cli = typer.Typer()
@@ -131,14 +132,6 @@ def compare_models_command():
 )
 def sync_models_command():
     sync_models_commands()
-
-
-# @invoke_models_cli.command(
-#     "list",
-#     help="List models in the database, but no longer on disk.",
-# )
-# def list_command():
-#     list_models_cli()
 
 
 @invoke_models_cli.command("about", help="Functions for information on this tool.")
