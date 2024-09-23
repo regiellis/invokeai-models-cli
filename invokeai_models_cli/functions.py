@@ -310,35 +310,48 @@ def ensure_snapshots_dir():
 # ANCHOR: DATABASE FUNCTIONS END
 
 
-def compare_models(
+def filter_and_compare_models(
     local_models: List[Dict[str, Any]], db_models: List[Dict[str, Any]]
-) -> None:
+) -> List[Dict[str, Any]]:
     """
-    Compare database entries with local model files and display differences.
-    Only includes models with source_type:path and format of LORA or checkpoint.
+    Filter database models and compare with local model files.
 
     Args:
     local_models (List[Dict[str, Any]]): Information about local model files.
     db_models (List[Dict[str, Any]]): Information about models in the database.
-    """
 
+    Returns:
+    List[Dict[str, Any]]: List of models in the database but not on disk.
+    """
     # Filter db_models to only include relevant models
     filtered_db_models = [
-        model
-        for model in db_models
+        model for model in db_models
         if model.get("metadata", {}).get("source_type") == "path"
-        and model.get("metadata", {}).get("format", "").lower()
-        in ["lora", "checkpoint"]
+        and model.get("metadata", {}).get("format", "").lower() in ["lora", "checkpoint"]
     ]
 
     # Create sets for easy comparison
     local_filenames = {model["name"] for model in local_models}
     db_filenames = {model["name"] for model in filtered_db_models}
-
+    
     # Models present in the database but not in local files
     missing_on_disk = db_filenames - local_filenames
+    
+    # Filter and sort missing models
+    missing_models = sorted(
+        [model for model in filtered_db_models if model["name"] in missing_on_disk],
+        key=itemgetter("name")
+    )
 
-    # Prepare a table to display the results
+    return missing_models
+
+def display_missing_models(missing_models: List[Dict[str, Any]]) -> None:
+    """
+    Display the models that are in the database but not on disk.
+
+    Args:
+    missing_models (List[Dict[str, Any]]): List of models missing on disk.
+    """
     console = Console()
     models_table = Table(title="Models in Database but Not on Disk")
 
@@ -349,13 +362,6 @@ def compare_models(
     models_table.add_column("Created", justify="left", style="white")
     models_table.add_column("Updated", justify="left", style="yellow")
 
-    # Filter and sort missing models
-    missing_models = sorted(
-        [model for model in filtered_db_models if model["name"] in missing_on_disk],
-        key=itemgetter("name"),
-    )
-
-    # Add entries for missing models
     for model in missing_models:
         metadata = model.get("metadata", {})
         timestamps = model.get("Timestamps", {})
@@ -368,13 +374,24 @@ def compare_models(
             timestamps.get("updated_at", "N/A"),
         )
 
-    # Display the models_table
     if missing_models:
         console.print(models_table)
     else:
-        console.print(
-            "All database models (LORA and checkpoint) with source_type:path are present on disk."
-        )
+        console.print("All database models (LORA and checkpoint) with source_type:path are present on disk.")
+
+def compare_models(
+    local_models: List[Dict[str, Any]], db_models: List[Dict[str, Any]]
+) -> None:
+    """
+    Compare database entries with local model files and display differences.
+    Only includes models with source_type:path and format of LORA or checkpoint.
+
+    Args:
+    local_models (List[Dict[str, Any]]): Information about local model files.
+    db_models (List[Dict[str, Any]]): Information about models in the database.
+    """
+    missing_models = filter_and_compare_models(local_models, db_models)
+    display_missing_models(missing_models)
 
 
 def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
@@ -385,7 +402,8 @@ def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
     models_dir (str): Path to the directory containing 'checkpoints' and 'lora' folders.
 
     Returns:
-    List[Dict[str, Any]]: List of dictionaries containing information about each model file with .safetensor extension.
+    List[Dict[str, Any]]: List of dictionaries containing information about each model file 
+    with .safetensor extension.
     """
     model_info = []
     subdirs = ["checkpoints", "loras"]
