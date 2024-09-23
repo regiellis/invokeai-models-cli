@@ -14,7 +14,6 @@ from .helpers import (
     create_table,
     random_name,
     process_tuples,
-    tuple_to_dict,
 )
 from operator import itemgetter
 from rich.markdown import Markdown
@@ -49,6 +48,7 @@ __all__ = [
 
 
 def get_db(connection: bool = False) -> Union[sqlite3.Connection, sqlite3.Cursor]:
+    #TODO - Move this to a helper file
     database = sqlite3.connect(DATABASE_PATH)
     if connection:
         return database
@@ -56,6 +56,7 @@ def get_db(connection: bool = False) -> Union[sqlite3.Connection, sqlite3.Cursor
 
 
 def get_database_models() -> List[Dict[str, Any]]:
+    #TODO - Move this to a helper file
     cached_data = manage_cache("database_models")
     if cached_data is not None:
         return cached_data
@@ -65,16 +66,14 @@ def get_database_models() -> List[Dict[str, Any]]:
     )
     return manage_cache("database_models", db_models)
 
-
-import os
-
-
+# ANCHOR - CACHE FUNCTIONS START
 def update_cache(display: bool = True) -> None:
     """
     Manually update both local and database model caches.
     Deletes existing cache files before creating new ones.
     """
     # TODO - Cache was not updating correctly, need to figure out why, deleting and recreating works fine
+    
     # Delete existing cache files
     for cache_type in ["local_models", "database_models"]:
         cache_file = os.path.join(SNAPSHOTS_DIR, f"{cache_type}_cache.json")
@@ -123,6 +122,8 @@ def manage_cache(
     # If we reach here, either the cache doesn't exist or it's too old
     return None
 
+# ANCHOR - CACHE FUNCTIONS END
+
 
 # ANCHOR: DATABASE FUNCTIONS START
 def create_snapshot() -> None:
@@ -132,7 +133,7 @@ def create_snapshot() -> None:
         )
         return
 
-    # Generate a human-readable timestamp
+    # timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     snapshot_name = f"{random_name()}_{timestamp.replace(':', '-')}.db"
     snapshot_path = os.path.join(SNAPSHOTS_DIR, snapshot_name)
@@ -292,7 +293,7 @@ def restore_snapshot():
         console.print("Restoration cancelled.")
         return
 
-    # Extract the snapshot name from the selection
+    # snapshot name from the selection
     snapshot_name = answers["snapshot"].split(" (")[0]
     snapshot_to_restore = next(
         (s for s in snapshots if s["name"] == snapshot_name), None
@@ -373,7 +374,7 @@ def ensure_snapshots_dir():
 
 # ANCHOR: DATABASE FUNCTIONS END
 
-
+# ANCHOR: FILTER FUNCTIONS START
 def filter_and_compare_models(
     local_models: List[Dict[str, Any]], db_models: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
@@ -420,7 +421,7 @@ def display_missing_models(missing_models: List[Dict[str, Any]]) -> None:
     Args:
     missing_models (List[Dict[str, Any]]): List of models missing on disk.
     """
-    models_table = Table(title="Models in Database but Not on Disk")
+    models_table = Table(title="Models in Database but not on Disk")
 
     models_table.add_column("Name", justify="left", style="yellow")
     models_table.add_column("Type", justify="left", style="cyan")
@@ -444,7 +445,7 @@ def display_missing_models(missing_models: List[Dict[str, Any]]) -> None:
     if missing_models:
         console.print(models_table)
     else:
-        console.print("All database models (LORA and checkpoint) are present on disk.")
+        feedback_message("No missing models found.", "success")
 
 
 def sync_models(
@@ -460,11 +461,13 @@ def sync_models(
     missing_models = filter_and_compare_models(local_models, db_models)
 
     if not missing_models:
-        console.print("All database models are in sync with local files.")
+        feedback_message("All database models are in sync with local files.", "success")
         return
 
-    console.print("[yellow]Warning: This operation will modify the database.[/yellow]")
-    console.print("A snapshot will be created before any changes are made.")
+    feedback_message(
+        "Warning: This operation will modify the database, a snapshot will be created before any changes are made.",
+        "warning",
+    )
 
     # Create a snapshot
     create_snapshot()
@@ -485,11 +488,12 @@ def sync_models(
         models_to_sync = missing_models
 
     if not models_to_sync:
-        console.print("No models selected for sync. Operation cancelled.")
+        feedback_message("No models selected for sync. Operation cancelled.", "info")
         return
 
     # Perform sync operation
     perform_sync(models_to_sync, local_models)
+    # NOTE: DO BETTER>> should not be calling manage_cache twice
     manage_cache("local_models", collect_model_info(MODELS_DIR))
     manage_cache("database_models", get_database_models())
 
@@ -756,7 +760,7 @@ def display_local_models(model_info: List[Dict[str, Any]], display_tree: bool):
 
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Filename", style="cyan", no_wrap=True)
-        table.add_column("Relative Path", style="green")
+        table.add_column("Relative Path", style="white")
         table.add_column("Created", style="yellow")
         table.add_column("Updated", style="yellow")
 
