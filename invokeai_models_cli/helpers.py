@@ -156,3 +156,27 @@ def tuple_to_dict(input_tuple: Tuple) -> Dict[str, Any]:
         result["metadata"] = None
 
     return result
+
+def manage_cache(cache_type: str, data: List[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    cache_file = os.path.join(SNAPSHOTS_DIR, f"{cache_type}_cache.json")
+    current_time = datetime.now()
+
+    if os.path.exists(cache_file):
+        with open(cache_file, 'r') as f:
+            cache = json.load(f)
+        
+        last_updated = datetime.fromisoformat(cache['last_updated'])
+        if current_time - last_updated < timedelta(weeks=1):
+            return cache['data']
+
+    if data is not None:
+        cache = {
+            'last_updated': current_time.isoformat(),
+            'data': data
+        }
+        with open(cache_file, 'w') as f:
+            json.dump(cache, f, indent=2)
+
+    return data
+
+

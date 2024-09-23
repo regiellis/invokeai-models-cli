@@ -6,7 +6,7 @@ import inquirer
 import importlib.resources
 import tempfile
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Tuple, Union
 import sqlite3
 from .helpers import (
@@ -51,6 +51,36 @@ def get_db(connection: bool) -> Any:
     if connection:
         return database
     return database.cursor()
+
+def get_database_models() -> List[Dict[str, Any]]:
+    cached_data = manage_cache('database_models')
+    if cached_data is not None:
+        return cached_data
+
+    db_models = process_tuples(get_db(connection=True).execute("SELECT * FROM models").fetchall())
+    return manage_cache('database_models', db_models)
+
+def manage_cache(cache_type: str, data: List[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    cache_file = os.path.join(SNAPSHOTS_DIR, f"{cache_type}_cache.json")
+    current_time = datetime.now()
+
+    if os.path.exists(cache_file):
+        with open(cache_file, 'r') as f:
+            cache = json.load(f)
+        
+        last_updated = datetime.fromisoformat(cache['last_updated'])
+        if current_time - last_updated < timedelta(weeks=1):
+            return cache['data']
+
+    if data is not None:
+        cache = {
+            'last_updated': current_time.isoformat(),
+            'data': data
+        }
+        with open(cache_file, 'w') as f:
+            json.dump(cache, f, indent=2)
+
+    return data
 
 
 # ANCHOR: DATABASE FUNCTIONS START
@@ -420,6 +450,8 @@ def sync_models(
 
     # Perform sync operation
     perform_sync(models_to_sync, local_models)
+    manage_cache('local_models', collect_model_info(MODELS_DIR))
+    manage_cache('database_models', get_database_models())
 
 
 def select_models_to_sync(missing_models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -482,20 +514,18 @@ def perform_sync(
 def compare_models_display() -> None:
     """Compare and display local and database models."""
     local_models = collect_model_info(MODELS_DIR)
-    db_models = process_tuples(
-        get_db(connection=True).execute("SELECT * FROM models").fetchall()
-    )
+    db_models = get_database_models()
     missing_models = filter_and_compare_models(local_models, db_models)
     display_missing_models(missing_models)
 
     if missing_models:
         questions = [
-            inquirer.Confirm(
-                "sync", message="Would you like to sync these models?", default=False
-            ),
+            inquirer.Confirm('sync',
+                             message="Would you like to sync these models?",
+                             default=False),
         ]
         answers = inquirer.prompt(questions)
-        if answers["sync"]:
+        if answers['sync']:
             sync_models(local_models, db_models)
 
 
@@ -525,6 +555,10 @@ def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
     List[Dict[str, Any]]: List of dictionaries containing information about each model file
     with .safetensor extension.
     """
+    cached_data = manage_cache('local_models')
+    if cached_data is not None:
+        return cached_data
+    
     model_info = []
     subdirs = ["checkpoints", "loras"]
 
@@ -569,7 +603,7 @@ def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
                     }
                 )
 
-    return model_info
+    return manage_cache('local_models', model_info)
 
 
 def display_database_models(data: List[Union[Dict[str, Any], Tuple]]) -> None:
