@@ -24,7 +24,7 @@ Choose one of the following methods to install/run the tool:
 ### Using `pipx` (Recommended)
 
 ```bash
-pipx install invokeai-models
+pipx install invokeai-models-cli
 ```
 
 ### Using `pip`
