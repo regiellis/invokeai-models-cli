@@ -42,6 +42,9 @@ packages = ["invokeai_models_cli"]
 [tool.hatch.build.targets.sdist]
 include = [
     "/invokeai_models_cli",
+    "/README.md",
+    "/LICENSE",
+    "/MANIFEST.in"
 ]
 
 [tool.hatch.build]
