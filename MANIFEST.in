@@ -1,0 +1,3 @@
+include README.md
+include LICENSE
+recursive-include invokeai_models_cli/snapshots *.json

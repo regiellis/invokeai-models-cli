@@ -46,7 +46,13 @@ include = [
 
 [tool.hatch.build]
 include = [
+    "invokeai_models_cli/**/*.py",
+    "invokeai_models_cli/**/*.json",
+    "invokeai_models_cli/**/*.md",
     "invokeai_models_cli/snapshots/*",
+    "invokeai_models_cli/snapshots/*.json",
+    "README.md",
+    "LICENSE"
 ]
 
 

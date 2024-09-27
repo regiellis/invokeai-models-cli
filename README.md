@@ -1,15 +1,10 @@
 # InvokeAI Models CLI
 
-
 [![PyPI](https://img.shields.io/pypi/v/invokeai-models)](https://pypi.org/project/invokeai-models-cli/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/invokeai-models)](https://pypi.org/project/invokeai-models-cli/)
 
 > [!NOTE]
 > Project features were driven by personal needs and not a sense to create a general-purpose tool. As such, the tool may not be suitable for all use cases. Please use it with caution and always back up your data before making any changes. It is not intended to replace the official Invoke AI web UI but provides additional functionality for managing orphaned models.
-
-
-
-
 
 **InvokeAI Models CLI** is a simplified command-line tool for managing orphaned Invoke AI models left in the database after their external sources have been deleted. This tool allows you to list, compare, and delete models automatically or via an interactive selection menu.
 
@@ -45,7 +40,7 @@ Make sure to create and activate a virtual environment before installing locally
 
 After installation, use the following commands:
 
-```
+```bash
 invokeai-models [OPTIONS] COMMAND [ARGS]
 ```
 
@@ -64,8 +59,6 @@ invokeai-models [OPTIONS] COMMAND [ARGS]
 - **sync-models**: Sync orphaned models with the current external sources or delete them if they no longer exist.
 
 - **database-models**: List and manage models in the Invoke AI database, including orphaned ones.
-
-- **about**: Display information about this CLI tool, such as version and licensing details.
 
 ## Examples
 

@@ -172,16 +172,13 @@ def create_snapshot() -> None:
         feedback_message(f"Error creating snapshot: {str(e)}", "error")
 
 
-def load_snapshots() -> List[Dict[str, str]]:
-    if os.path.exists(SNAPSHOTS_JSON):
-        try:
-            with open(SNAPSHOTS_JSON, "r") as f:
-                return json.load(f)
-        except json.JSONDecodeError:
-            console.print(
-                "[bold yellow]Warning:[/bold yellow] Snapshots file is corrupted. Starting with an empty list."
-            )
-    return []
+def load_snapshots():
+    try:
+        with importlib.resources.open_text('invokeai_models_cli.snapshots', 'snapshots.json') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        console.print("[bold yellow]Warning:[/bold yellow] Snapshots file not found. Starting with an empty list.")
+        return []
 
 
 def save_snapshots(snapshots: List[Dict[str, str]]) -> None:
@@ -850,7 +847,7 @@ def about_cli(readme: bool, changelog: bool) -> None:
     for document in documents:
         try:
             # Try to get the file content from the package resources
-            with importlib.resources.open_text("civitai_models_manager", document) as f:
+            with importlib.resources.open_text("invokeai_models_cli", document) as f:
                 content = f.read()
             # Create a temporary file to pass to display_readme
             with tempfile.NamedTemporaryFile(
