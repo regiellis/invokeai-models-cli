@@ -48,16 +48,13 @@ include = [
 ]
 
 [tool.hatch.build]
-include = [
+artifacts = [
     "invokeai_models_cli/**/*.py",
-    "invokeai_models_cli/**/*.json",
-    "invokeai_models_cli/**/*.md",
-    "invokeai_models_cli/snapshots/*",
     "invokeai_models_cli/snapshots/*.json",
+    "invokeai_models_cli/snapshots/*.db",
     "README.md",
     "LICENSE"
 ]
-
 
 [project.urls]
 Repository = "https://github.com/regiellis/invokeai_models_cli"

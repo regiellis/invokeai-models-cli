@@ -3,6 +3,7 @@ import random
 import json
 
 from typing import Dict, Any, Tuple, List
+from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
@@ -156,7 +157,7 @@ def tuple_to_dict(input_tuple: Tuple) -> Dict[str, Any]:
 
     result = dict(zip(keys, input_tuple))
 
-    # Parse the JSON string in metadata_json
+    
     if result["metadata_json"]:
         result["metadata"] = json.loads(result["metadata_json"])
         del result["metadata_json"]
@@ -164,3 +165,16 @@ def tuple_to_dict(input_tuple: Tuple) -> Dict[str, Any]:
         result["metadata"] = None
 
     return result
+
+
+def ensure_snapshots_dir(directory: Path) -> bool:
+    if not directory.exists():
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            console.print(f"[green]Created snapshots directory: {directory}[/green]")
+        except Exception as e:
+            console.print(
+                f"[bold red]Error creating snapshots directory:[/bold red] {str(e)}"
+            )
+            return False
+    return True

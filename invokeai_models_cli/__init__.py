@@ -1,12 +1,13 @@
 import os
 import inquirer
+import importlib.resources
 from pathlib import Path
 from typing import Final
 from dotenv import load_dotenv, set_key
 import typer
 import platform
 
-from .helpers import feedback_message
+from .helpers import feedback_message, ensure_snapshots_dir
 
 
 def get_required_input(prompt: str) -> str:
@@ -163,3 +164,6 @@ load_environment_variables()
 INVOKE_AI_DIR: Final = os.environ["INVOKE_AI_DIR"]
 MODELS_DIR: Final = os.environ["MODELS_DIR"]
 SNAPSHOTS: Final = os.environ["SNAPSHOTS"]
+
+SNAPSHOTS_DIR = Path(importlib.resources.files("invokeai_models_cli")) / "snapshots"
+ensure_snapshots_dir(SNAPSHOTS_DIR)

@@ -33,9 +33,9 @@ console = Console()
 # Get the package directory
 PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_PATH = os.path.join(INVOKE_AI_DIR, "databases", "invokeai.db")
-SNAPSHOTS_DIR = os.path.join(PACKAGE_DIR, "snapshots")
-SNAPSHOTS_JSON = os.path.join(SNAPSHOTS_DIR, "snapshots.json")
-MODELS_INDEX_JSON = os.path.join(SNAPSHOTS_DIR, "models-index.json")
+SNAPSHOTS_DIR = importlib.resources.files("invokeai_models_cli") / "snapshots"
+SNAPSHOTS_JSON = SNAPSHOTS_DIR / "snapshots.json"
+MODELS_INDEX_JSON = SNAPSHOTS_DIR / "models-index.json"
 
 __all__ = [
     "create_snapshot",
@@ -174,10 +174,14 @@ def create_snapshot() -> None:
 
 def load_snapshots():
     try:
-        with importlib.resources.open_text('invokeai_models_cli.snapshots', 'snapshots.json') as f:
+        with importlib.resources.open_text(
+            "invokeai_models_cli.snapshots", "snapshots.json"
+        ) as f:
             return json.load(f)
     except FileNotFoundError:
-        console.print("[bold yellow]Warning:[/bold yellow] Snapshots file not found. Starting with an empty list.")
+        console.print(
+            "[bold yellow]Warning:[/bold yellow] Snapshots file not found. Starting with an empty list."
+        )
         return []
 
 
@@ -354,21 +358,6 @@ def restore_snapshot():
         # Clean up the backup file
         if os.path.exists(backup_path):
             os.remove(backup_path)
-
-
-def ensure_snapshots_dir():
-    if not os.path.exists(SNAPSHOTS_DIR):
-        try:
-            os.makedirs(SNAPSHOTS_DIR)
-            console.print(
-                f"[green]Created snapshots directory: {SNAPSHOTS_DIR}[/green]"
-            )
-        except Exception as e:
-            console.print(
-                f"[bold red]Error creating snapshots directory:[/bold red] {str(e)}"
-            )
-            return False
-    return True
 
 
 # ANCHOR: DATABASE FUNCTIONS END

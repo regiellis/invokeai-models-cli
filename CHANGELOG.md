@@ -2,6 +2,10 @@
 
 ## All notable changes to this project will be documented in this file
 
+### [1.2.0] - 2024-9-27
+
+- **Fix**: Fix formatting issues in README.md. Version bump to 1.2.0.
+
 ### [1.1.0] - 2024-9-27
 
 - **Fix**: Fix issue with static files not be available when installing via pipx.
