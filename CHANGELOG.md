@@ -2,7 +2,11 @@
 
 ## All notable changes to this project will be documented in this file
 
-### [1.2.0] - 2024-9-27
+### [1.3.0] - 2024-11-20
+
+- **Feature**: Add dry-run flag and delete models on disk.
+
+### [1.2.0] - 2024-11-210
 
 - **Fix**: Fix formatting issues in README.md. Version bump to 1.2.0.
 
