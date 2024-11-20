@@ -104,7 +104,6 @@ def manage_cache(
     current_time = datetime.now()
 
     if data is not None:
-        # Always update the cache when new data is provided
         cache = {"last_updated": current_time.isoformat(), "data": data}
         with open(cache_file, "w") as f:
             json.dump(cache, f, indent=2)
@@ -115,9 +114,7 @@ def manage_cache(
             cache = json.load(f)
 
         last_updated = datetime.fromisoformat(cache["last_updated"])
-        if current_time - last_updated < timedelta(
-            hours=1
-        ):  # Reduced cache lifetime to 1 hour
+        if current_time - last_updated < timedelta(hours=1):
             return cache["data"]
 
     # If we reach here, either the cache doesn't exist or it's too old
@@ -135,7 +132,6 @@ def create_snapshot() -> None:
         )
         return
 
-    # timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     snapshot_name = f"{random_name()}_{timestamp.replace(':', '-')}.db"
     snapshot_path = os.path.join(SNAPSHOTS_DIR, snapshot_name)
@@ -143,7 +139,6 @@ def create_snapshot() -> None:
     try:
         console.print("[green]Creating snapshot...[/green]")
 
-        # Use SQLite backup API
         with (
             get_db(connection=True) as source_conn,
             sqlite3.connect(snapshot_path) as dest_conn,
@@ -217,10 +212,8 @@ def delete_snapshot() -> None:
         console.print("[yellow]No snapshots found to delete.[/yellow]")
         return
 
-    # Create choices for the inquirer prompt
     choices = [f"{s['name']} ({s['timestamp']})" for s in snapshots]
 
-    # Create the checkbox prompt
     questions = [
         inquirer.Checkbox(
             "snapshots",
@@ -229,14 +222,12 @@ def delete_snapshot() -> None:
         )
     ]
 
-    # Present the selection menu
     answers = inquirer.prompt(questions)
 
     if not answers or not answers["snapshots"]:
         console.print("No snapshots selected. Deletion cancelled.")
         return
 
-    # Confirmation prompt
     confirm = inquirer.confirm(
         f"Are you sure you want to delete {len(answers['snapshots'])} snapshot(s)? This action is irreversible."
     )
@@ -275,11 +266,9 @@ def restore_snapshot():
         console.print("[yellow]No snapshots found to restore.[/yellow]")
         return
 
-    # Create choices for the inquirer prompt
     choices = [f"{s['name']} ({s['timestamp']})" for s in snapshots]
     choices.append("Cancel")
 
-    # Create the selection prompt
     questions = [
         inquirer.List(
             "snapshot",
@@ -289,14 +278,12 @@ def restore_snapshot():
         )
     ]
 
-    # Present the selection menu
     answers = inquirer.prompt(questions)
 
     if not answers or answers["snapshot"] == "Cancel":
         console.print("Restoration cancelled.")
         return
 
-    # snapshot name from the selection
     snapshot_name = answers["snapshot"].split(" (")[0]
     snapshot_to_restore = next(
         (s for s in snapshots if s["name"] == snapshot_name), None
@@ -306,7 +293,6 @@ def restore_snapshot():
         console.print("[bold red]Error:[/bold red] Selected snapshot not found.")
         return
 
-    # Confirmation prompt
     confirm = inquirer.confirm(
         "Are you sure you want to restore this snapshot? This will replace your current database."
     )
@@ -322,7 +308,6 @@ def restore_snapshot():
         )
         return
 
-    # Backup current database
     backup_path = DATABASE_PATH + ".backup"
     try:
         shutil.copy2(DATABASE_PATH, backup_path)
@@ -333,7 +318,6 @@ def restore_snapshot():
         )
         return
 
-    # Restore snapshot
     try:
         shutil.copy2(snapshot_path, DATABASE_PATH)
         console.print(
@@ -341,7 +325,6 @@ def restore_snapshot():
         )
     except Exception as e:
         console.print(f"[bold red]Error restoring snapshot:[/bold red] {str(e)}")
-        # If restoration fails, try to restore the backup
         try:
             shutil.copy2(backup_path, DATABASE_PATH)
             console.print(
@@ -355,7 +338,6 @@ def restore_snapshot():
                 "[bold yellow]Please manually restore your database from the backup file.[/bold yellow]"
             )
     finally:
-        # Clean up the backup file
         if os.path.exists(backup_path):
             os.remove(backup_path)
 
@@ -377,7 +359,6 @@ def filter_and_compare_models(
     Returns:
     List[Dict[str, Any]]: List of models in the database but not on disk.
     """
-    # Filter db_models to only include relevant models
     update_cache(display=False)
     filtered_db_models = [
         model
@@ -387,14 +368,11 @@ def filter_and_compare_models(
         in ["lora", "checkpoint"]
     ]
 
-    # Create sets for easy comparison
     local_filenames = {model["name"] for model in local_models}
     db_filenames = {model["name"] for model in filtered_db_models}
 
-    # Models present in the database but not in local files
     missing_on_disk = db_filenames - local_filenames
 
-    # Filter and sort missing models
     missing_models = sorted(
         [model for model in filtered_db_models if model["name"] in missing_on_disk],
         key=itemgetter("name"),
@@ -437,31 +415,113 @@ def display_missing_models(missing_models: List[Dict[str, Any]]) -> None:
         feedback_message("No missing models found.", "success")
 
 
-def sync_models(
-    local_models: List[Dict[str, Any]], db_models: List[Dict[str, Any]]
-) -> None:
-    """
-    Sync database models with local model files.
+def delete_models(dry_run: bool = False) -> None:
+    db_models = get_database_models()
 
-    Args:
-    local_models (List[Dict[str, Any]]): Information about local model files.
-    db_models (List[Dict[str, Any]]): Information about models in the database.
-    """
+    if not db_models:
+        feedback_message("No models found in the database.", "info")
+        return
+
+    choices = [
+        f"{model['name']} ({model['metadata'].get('format', 'Unknown')})"
+        for model in db_models
+    ]
+
+    questions = [
+        inquirer.Checkbox(
+            "models_to_delete",
+            message="Select models to delete (from database and disk)",
+            choices=choices,
+        )
+    ]
+
+    answers = inquirer.prompt(questions)
+
+    if not answers or not answers["models_to_delete"]:
+        feedback_message("No models selected for deletion.", "info")
+        return
+
+    selected_models = [
+        model
+        for model in db_models
+        if f"{model['name']} ({model['metadata'].get('format', 'Unknown')})"
+        in answers["models_to_delete"]
+    ]
+
+    if dry_run:
+        console.print("\n[bold]Dry Run: Changes that would be made:[/bold]")
+        for model in selected_models:
+            console.print(f"[red]Would delete model:[/red] {model['name']}")
+            console.print(f"  [dim]From database[/dim]")
+            file_path = model["metadata"].get("path")
+            if file_path and os.path.exists(file_path):
+                console.print(f"  [dim]From disk: {file_path}[/dim]")
+            else:
+                console.print(f"  [dim]File not found on disk: {file_path}[/dim]")
+            console.print()
+        console.print(
+            "[bold green]No changes were made to the database or disk.[/bold green]"
+        )
+        return
+
+    confirm = inquirer.confirm(
+        f"Are you sure you want to delete {len(selected_models)} model(s) from both the database and disk? This action is irreversible."
+    )
+
+    if not confirm:
+        feedback_message("Deletion cancelled.", "info")
+        return
+
+    db_conn = get_db(connection=True)
+    cursor = db_conn.cursor()
+
+    try:
+        for model in selected_models:
+
+            cursor.execute("DELETE FROM models WHERE name = ?", (model["name"],))
+
+            file_path = model["metadata"].get("path")
+            if file_path and os.path.exists(file_path):
+                os.remove(file_path)
+                feedback_message(f"Deleted model file: {file_path}", "success")
+            else:
+                feedback_message(
+                    f"Model file not found on disk: {file_path}", "warning"
+                )
+
+        db_conn.commit()
+        feedback_message("Selected models deleted from database and disk.", "success")
+    except sqlite3.Error as e:
+        db_conn.rollback()
+        feedback_message(
+            f"Error during deletion: {str(e)}. Changes rolled back.", "error"
+        )
+    except Exception as e:
+        feedback_message(f"Error deleting model files: {str(e)}", "error")
+    finally:
+        db_conn.close()
+
+    update_cache()
+
+
+def sync_models(
+    local_models: List[Dict[str, Any]],
+    db_models: List[Dict[str, Any]],
+    dry_run: bool = False,
+) -> None:
     missing_models = filter_and_compare_models(local_models, db_models)
 
     if not missing_models:
         feedback_message("All database models are in sync with local files.", "success")
         return
 
-    feedback_message(
-        "Warning: This operation will modify the database, a snapshot will be created before any changes are made.",
-        "warning",
-    )
+    if not dry_run:
+        feedback_message(
+            "Warning: This operation will modify the database, a snapshot will be created before any changes are made.",
+            "warning",
+        )
+        create_snapshot()
 
-    # Create a snapshot
-    create_snapshot()
-
-    # Ask user for sync method
     questions = [
         inquirer.List(
             "sync_method",
@@ -480,11 +540,38 @@ def sync_models(
         feedback_message("No models selected for sync. Operation cancelled.", "info")
         return
 
-    # Perform sync operation
-    perform_sync(models_to_sync, local_models)
-    # NOTE: DO BETTER>> should not be calling manage_cache twice
+    if dry_run:
+        perform_dry_run(models_to_sync, local_models)
+    else:
+        perform_sync(models_to_sync, local_models)
+
     manage_cache("local_models", collect_model_info(MODELS_DIR))
     manage_cache("database_models", get_database_models())
+
+
+def perform_dry_run(
+    models_to_sync: List[Dict[str, Any]], local_models: List[Dict[str, Any]]
+) -> None:
+    console.print("\n[bold]Dry Run: Changes that would be made:[/bold]")
+
+    for model in models_to_sync:
+        local_model = next(
+            (m for m in local_models if m["name"] == model["name"]), None
+        )
+        if local_model:
+            console.print(
+                f"[yellow]Would update path for model:[/yellow] {model['name']}"
+            )
+            console.print(
+                f"  [dim]Old path:[/dim] {model['metadata'].get('path', 'N/A')}"
+            )
+            console.print(f"  [dim]New path:[/dim] {local_model['file_path']}\n")
+        else:
+            console.print(
+                f"[red]Would delete model from database:[/red] {model['name']}\n"
+            )
+
+    console.print("[bold green]No changes were made to the database.[/bold green]")
 
 
 def select_models_to_sync(missing_models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -530,7 +617,6 @@ def perform_sync(
                 (m for m in local_models if m["name"] == model["name"]), None
             )
             if local_model:
-                # Update path
                 new_path = local_model["file_path"]
                 cursor.execute(
                     "UPDATE models SET path = ? WHERE name = ?",
@@ -538,7 +624,6 @@ def perform_sync(
                 )
                 feedback_message(f"Updated path for model: {model['name']}", "success")
             else:
-                # Delete model from database
                 cursor.execute("DELETE FROM models WHERE name = ?", (model["name"],))
                 feedback_message(
                     f"Deleted model from database: {model['name']}", "warning"
@@ -556,24 +641,27 @@ def perform_sync(
 
 
 def compare_models_display() -> None:
-    """Compare and display local and database models."""
-    # Always update the cache before comparing
-
     local_models = manage_cache("local_models")
     db_models = manage_cache("database_models")
-
     missing_models = filter_and_compare_models(local_models, db_models)
     display_missing_models(missing_models)
 
     if missing_models:
         questions = [
-            inquirer.Confirm(
-                "sync", message="Would you like to sync these models?", default=False
+            inquirer.List(
+                "action",
+                message="What would you like to do?",
+                choices=["Sync models", "Dry run", "Cancel"],
             ),
         ]
         answers = inquirer.prompt(questions)
-        if answers["sync"]:
+
+        if answers["action"] == "Sync models":
             sync_models(local_models, db_models)
+        elif answers["action"] == "Dry run":
+            sync_models(local_models, db_models, dry_run=True)
+        else:
+            feedback_message("Operation cancelled.", "info")
 
 
 def compare_models(
@@ -616,22 +704,17 @@ def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
 
         for root, _, files in os.walk(dir_path):
             for file in files:
-                # Only process files with .safetensors extension
                 if not file.endswith(".safetensors"):
                     continue
 
                 file_path = os.path.join(root, file)
                 relative_path = os.path.relpath(file_path, models_dir)
 
-                # Get file stats
                 stats = os.stat(file_path)
                 created = datetime.fromtimestamp(stats.st_ctime)
                 modified = datetime.fromtimestamp(stats.st_mtime)
 
-                # Determine type based on subdirectory
-                type_parts = relative_path.split(os.path.sep)[
-                    1:-1
-                ]  # Exclude the main subdir and filename
+                type_parts = relative_path.split(os.path.sep)[1:-1]
                 type_str = " ".join(
                     part.replace("_", " ") for part in type_parts
                 ).lower()
@@ -642,9 +725,7 @@ def collect_model_info(models_dir: str) -> List[Dict[str, Any]]:
                         "name": os.path.splitext(file)[0],
                         "file_path": file_path,
                         "relative_path": relative_path,
-                        "type": (
-                            type_str if type_str else subdir.rstrip("s")
-                        ),  # Use subdir name if no subdirectories
+                        "type": (type_str if type_str else subdir.rstrip("s")),
                         "created": created.isoformat(),
                         "updated": modified.isoformat(),
                     }
@@ -657,9 +738,7 @@ def display_database_models(data: List[Union[Dict[str, Any], Tuple]]) -> None:
     console = Console()
 
     for item in data:
-        # Check if item is a tuple or dict
         if isinstance(item, tuple):
-            # Convert tuple to dict
             keys = [
                 "key",
                 "hash",
@@ -679,20 +758,16 @@ def display_database_models(data: List[Union[Dict[str, Any], Tuple]]) -> None:
             ]
             item = dict(zip(keys, item))
 
-        # Only display items where source_type is "path"
         if item.get("source_type") != "path":
             continue
 
-        # Create a tree for each item
         tree = Tree(f"[bold blue]{item.get('name', 'Unnamed Item')}[/bold blue]")
 
-        # Add main attributes
         main_attrs = ["key", "hash", "base", "type", "format", "description"]
         for attr in main_attrs:
             if attr in item and item[attr]:
                 tree.add(f"[green]{attr}:[/green] {item[attr]}")
 
-        # Add path and source in a subtree
         path_tree = tree.add("Paths")
         if "path" in item:
             path_tree.add(f"[yellow]path:[/yellow] {item['path']}")
@@ -700,14 +775,12 @@ def display_database_models(data: List[Union[Dict[str, Any], Tuple]]) -> None:
             path_tree.add(f"[yellow]source:[/yellow] {item['source']}")
         path_tree.add(f"[yellow]source_type:[/yellow] {item['source_type']}")
 
-        # Add timestamps
         time_tree = tree.add("Timestamps")
         if "created_at" in item:
             time_tree.add(f"[cyan]created_at:[/cyan] {item['created_at']}")
         if "updated_at" in item:
             time_tree.add(f"[cyan]updated_at:[/cyan] {item['updated_at']}")
 
-        # Add metadata if present
         if "metadata" in item and item["metadata"]:
             metadata_tree = tree.add("[magenta]metadata[/magenta]")
             for k, v in item["metadata"].items():
@@ -735,7 +808,6 @@ def display_local_models(model_info: List[Dict[str, Any]], display_tree: bool):
     """
     console = Console()
 
-    # Group models by type
     models_by_type = {}
     for model in model_info:
         model_type = model["type"]
@@ -743,7 +815,6 @@ def display_local_models(model_info: List[Dict[str, Any]], display_tree: bool):
             models_by_type[model_type] = []
         models_by_type[model_type].append(model)
 
-    # Display models grouped by type
     for model_type, models in models_by_type.items():
         console.print(f"\n[bold blue]== {model_type.upper()} ==[/bold blue]")
 
@@ -763,7 +834,6 @@ def display_local_models(model_info: List[Dict[str, Any]], display_tree: bool):
 
         console.print(table)
 
-        # Display detailed information for each model
         if display_tree:
             for model in models:
                 tree = Tree(f"[bold cyan]{model['filename']}[/bold cyan]")
@@ -782,11 +852,189 @@ def local_models_display(display_tree: bool = False) -> None:
     display_local_models(local_models, display_tree)
 
 
-def database_models_display() -> None:
-    db = get_db(connection=True)
-    invokeai_models = db.execute("SELECT * FROM models").fetchall()
-    database_models = process_tuples(invokeai_models)
-    display_database_models(database_models)
+def database_models_display():
+    db_models = get_database_models()
+
+    if not db_models:
+        feedback_message("No models found in the database.", "info")
+        return
+
+    console.print(f"\n[bold]Total models in database:[/bold] {len(db_models)}")
+
+    format_counts = {}
+    for model in db_models:
+        model_format = model.get("metadata", {}).get("format", "Unknown")
+        format_counts[model_format] = format_counts.get(model_format, 0) + 1
+
+    for model_format, count in format_counts.items():
+        console.print(f"[cyan]{model_format}:[/cyan] {count}")
+
+    display_choice = typer.prompt(
+        "\nChoose display option (D: Detailed Table, T: Tree View, S: Select Model, C: Cancel)",
+        default="D",
+    )
+
+    valid_choices = {
+        "D": "Detailed Table",
+        "T": "Tree View",
+        "S": "Select Model",
+        "C": "Cancel",
+    }
+    while display_choice.upper() not in valid_choices:
+        console.print("[red]Invalid choice. Please try again.[/red]")
+        display_choice = typer.prompt(
+            "\nChoose display option (D: Detailed Table, T: Tree View, S: Select Model, C: Cancel)",
+            default="D",
+        )
+
+    if display_choice.upper() == "D":
+        display_detailed_table(db_models)
+    elif display_choice.upper() == "T":
+        display_tree_view(db_models)
+    elif display_choice.upper() == "C":
+        feedback_message("Operation cancelled.", "info")
+        return
+    else:
+        display_model_details(db_models)
+
+
+def display_detailed_table(db_models):
+    models_table = create_table(
+        "Database Models",
+        [
+            ("Name", "yellow"),
+            ("Type", "cyan"),
+            ("Format", "magenta"),
+            ("Path", "green"),
+            ("Created", "white"),
+            ("Updated", "yellow"),
+        ],
+    )
+
+    for model in db_models:
+        metadata = model.get("metadata", {})
+        models_table.add_row(
+            model["name"],
+            metadata.get("type", "N/A"),
+            metadata.get("format", "N/A"),
+            metadata.get("path", "N/A"),
+            model.get("created_at", "N/A"),
+            model.get("updated_at", "N/A"),
+        )
+
+    console.print(models_table)
+
+
+def display_tree_view(db_models):
+    tree = Tree("Database Models")
+    for model in db_models:
+        model_node = tree.add(f"[yellow]{model['name']}[/yellow]")
+        add_model_details_to_tree(model_node, model)
+    console.print(tree)
+
+
+def add_model_details_to_tree(node, model):
+    metadata = model.get("metadata", {})
+
+    node.add(f"[cyan]Type:[/cyan] {metadata.get('type', 'N/A')}")
+    node.add(f"[magenta]Format:[/magenta] {metadata.get('format', 'N/A')}")
+    node.add(f"[green]Path:[/green] {metadata.get('path', 'N/A')}")
+    node.add(f"[white]Created:[/white] {model.get('created_at', 'N/A')}")
+    node.add(f"[yellow]Updated:[/yellow] {model.get('updated_at', 'N/A')}")
+
+
+def display_model_details(db_models):
+    model_names = [model["name"] for model in db_models]
+    selected_model = typer.prompt(
+        "Enter the name of the model to view details", type=str
+    )
+
+    if selected_model not in model_names:
+        feedback_message("Model not found.", "error")
+        return
+
+    model = next((m for m in db_models if m["name"] == selected_model), None)
+    if model:
+        tree = Tree(f"[bold]{model['name']}[/bold]")
+        add_model_details_to_tree(tree, model)
+        console.print(tree)
+
+
+def display_tree_view(db_models):
+    tree = Tree("Database Models")
+    for model in db_models:
+        model_node = tree.add(f"[yellow]{model['name']}[/yellow]")
+        add_model_details_to_tree(model_node, model)
+    console.print(tree)
+
+
+def add_model_details_to_tree(node, model):
+    metadata = model.get("metadata", {})
+    timestamps = model.get("Timestamps", {})
+
+    node.add(f"[cyan]Type:[/cyan] {metadata.get('type', 'N/A')}")
+    node.add(f"[magenta]Format:[/magenta] {metadata.get('format', 'N/A')}")
+    node.add(f"[green]Path:[/green] {metadata.get('path', 'N/A')}")
+    node.add(f"[white]Created:[/white] {timestamps.get('created_at', 'N/A')}")
+    node.add(f"[yellow]Updated:[/yellow] {timestamps.get('updated_at', 'N/A')}")
+
+
+def display_model_details(db_models):
+    model_names = [model["name"] for model in db_models]
+    selected_model = typer.prompt(
+        "Enter the name of the model to view details", type=str
+    )
+
+    if selected_model not in model_names:
+        feedback_message("Model not found.", "error")
+        return
+
+    model = next((m for m in db_models if m["name"] == selected_model), None)
+    if model:
+        tree = Tree(f"[bold]{model['name']}[/bold]")
+        add_model_details_to_tree(tree, model)
+        console.print(tree)
+
+
+def display_tree_view(db_models):
+    tree = Tree("Database Models")
+    for model in db_models:
+        model_node = tree.add(f"[yellow]{model['name']}[/yellow]")
+        add_model_details_to_tree(model_node, model)
+    console.print(tree)
+
+
+def add_model_details_to_tree(node, model):
+    metadata = model.get("metadata", {})
+
+    node.add(f"[cyan]Type:[/cyan] {metadata.get('type', 'N/A')}")
+    node.add(f"[magenta]Format:[/magenta] {metadata.get('format', 'N/A')}")
+    node.add(f"[green]Path:[/green] {metadata.get('path', 'N/A')}")
+    node.add(f"[white]Created:[/white] {model.get('created_at', 'N/A')}")
+    node.add(f"[yellow]Updated:[/yellow] {model.get('updated_at', 'N/A')}")
+
+
+def display_model_details(db_models):
+    model_names = [model["name"] for model in db_models]
+
+    questions = [
+        inquirer.List(
+            "selected_model",
+            message="Select a model to view details",
+            choices=model_names,
+        )
+    ]
+
+    answers = inquirer.prompt(questions)
+    selected_model = answers["selected_model"]
+
+    model = next((m for m in db_models if m["name"] == selected_model), None)
+    if model:
+        tree = Tree(f"[bold]{model['name']}[/bold]")
+        add_model_details_to_tree(tree, model)
+        console.print(tree)
+    else:
+        feedback_message("Model not found.", "error")
 
 
 def compare_models_display() -> None:
@@ -835,25 +1083,20 @@ def about_cli(readme: bool, changelog: bool) -> None:
 
     for document in documents:
         try:
-            # Try to get the file content from the package resources
             with importlib.resources.open_text("invokeai_models_cli", document) as f:
                 content = f.read()
-            # Create a temporary file to pass to display_readme
             with tempfile.NamedTemporaryFile(
                 mode="w", delete=False, suffix=".md"
             ) as temp_file:
                 temp_file.write(content)
                 temp_file_path = temp_file.name
             display_readme(temp_file_path)
-            # Remove the temporary file
             Path(temp_file_path).unlink()
         except (FileNotFoundError, ImportError, ModuleNotFoundError):
-            # If not found in package resources, try the current directory
             local_path = Path(document)
             if local_path.exists():
                 display_readme(str(local_path))
             else:
-                # Try one directory up
                 parent_path = local_path.parent.parent / document
                 if parent_path.exists():
                     display_readme(str(parent_path))

@@ -2,7 +2,6 @@ from .__version__ import __version__
 import typer
 from typing_extensions import Annotated
 
-
 from .functions import (
     list_snapshots,
     delete_snapshot,
@@ -14,12 +13,8 @@ from .functions import (
     sync_models_commands,
     update_cache,
     about_cli,
+    delete_models,
 )
-
-from rich.traceback import install
-
-install()
-
 
 """
 ==============================================================================
@@ -58,10 +53,8 @@ invokeai-models about
 __version__ = __version__
 __all__ = ["invoke_models_cli"]
 
-
 invoke_models_cli = typer.Typer()
 database_cli = typer.Typer()
-# utils_cli = typer.Typer()
 
 invoke_models_cli.add_typer(
     database_cli,
@@ -122,7 +115,9 @@ def database_models_command():
     database_models_display()
 
 
-@invoke_models_cli.command("compare-models", help="List models in the database.")
+@invoke_models_cli.command(
+    "compare-models", help="Compare models in the database with local files."
+)
 def compare_models_command():
     compare_models_display()
 
@@ -130,8 +125,23 @@ def compare_models_command():
 @invoke_models_cli.command(
     "sync-models", help="Sync database models with local model files."
 )
-def sync_models_command():
-    sync_models_commands()
+def sync_models_command(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", "-d", help="Perform a dry run without making changes"
+    )
+):
+    sync_models_commands(dry_run=dry_run)
+
+
+@invoke_models_cli.command(
+    "delete-models", help="Delete models from the database and disk."
+)
+def delete_models_command(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", "-d", help="Perform a dry run without making changes"
+    )
+):
+    delete_models(dry_run=dry_run)
 
 
 @invoke_models_cli.command("about", help="Functions for information on this tool.")
@@ -152,7 +162,6 @@ def about_command(
     """
     Show README.md and/or CHANGELOG.md content.
     """
-
     if version:
         typer.echo(f"InvokeAI Preset CLI version: {__version__}", color=True)
         return

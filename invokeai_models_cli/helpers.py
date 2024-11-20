@@ -157,7 +157,6 @@ def tuple_to_dict(input_tuple: Tuple) -> Dict[str, Any]:
 
     result = dict(zip(keys, input_tuple))
 
-    
     if result["metadata_json"]:
         result["metadata"] = json.loads(result["metadata_json"])
         del result["metadata_json"]
