@@ -2,6 +2,10 @@
 
 ## All notable changes to this project will be documented in this file
 
+### [1.3.1] - 2024-11-24
+
+- **Feature**: Add dry-run flag and delete models on disk.
+
 ### [1.3.0] - 2024-11-20
 
 - **Feature**: Add dry-run flag and delete models on disk.
