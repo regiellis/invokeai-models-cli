@@ -1045,7 +1045,7 @@ def compare_models_display() -> None:
     compare_models(local_models, database_models)
 
 
-def sync_models_commands():
+def sync_models_commands(dry_run: bool = False) -> None:
     local_models = collect_model_info(MODELS_DIR)
     db_models = process_tuples(
         get_db(connection=True).execute("SELECT * FROM models").fetchall()
